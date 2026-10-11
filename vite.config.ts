@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [react()],
   build: {
     rollupOptions: {
-      input: { main: fileURLToPath(new URL('./index.html', import.meta.url)) },
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        hashTest: fileURLToPath(new URL('./hash-test.html', import.meta.url)),
+      },
     },
   },
   test: {
