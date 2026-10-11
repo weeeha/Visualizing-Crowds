@@ -13,9 +13,9 @@ import {
 } from 'three';
 import { buildShell, hash01 } from '../pile/shell';
 import { REPOSE_DEG, type Cone } from '../pile/volume';
-import { BUNDLE, bundleGeometry, bundleMaterials, cashCoreMaterial, figureMaterial, lyingMannequins, shrouds, type Detail } from './models';
+import { BUNDLE, bundleGeometry, bundleMaterials, cashCoreMaterial, figureMaterial, lyingMannequins, lyingSkeletons, shrouds, type Detail } from './models';
 
-export type BodyStyle = 'mannequin' | 'shroud';
+export type BodyStyle = 'mannequin' | 'shroud' | 'skeleton';
 
 export interface Heap {
   group: Group;
@@ -90,6 +90,10 @@ export function cashHeap(cone: Cone): Heap {
 
 const CLAY = ['#b9b1a6', '#a89f94', '#c7c0b6', '#9d958b', '#8f877d'];
 const CLOTH = ['#e8e2d6', '#ddd6c8', '#d2cab9', '#e3dccd'];
+const BONE = ['#e6dcc4', '#d9cdb1', '#ece4d0', '#cfc1a2'];
+const PALETTE: Record<BodyStyle, string[]> = { mannequin: CLAY, shroud: CLOTH, skeleton: BONE };
+// Skeletons leave gaps; a dark core reads as deep crevices between bones.
+const CORE: Record<BodyStyle, string> = { mannequin: '#4a4540', shroud: '#6b655b', skeleton: '#2f2b26' };
 
 const HI_DETAIL_SLANT_M = 20;
 
@@ -110,7 +114,7 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
 
   // The camera always orbits the peak, so only bodies near it are ever seen up close.
   // Those get full detail and cast shadows; the rest of the flank uses a light mesh.
-  const build = (d: Detail) => (style === 'mannequin' ? lyingMannequins(d) : shrouds(d));
+  const build = (d: Detail) => (style === 'mannequin' ? lyingMannequins(d) : style === 'skeleton' ? lyingSkeletons(d) : shrouds(d));
   const geos: Record<Detail, BufferGeometry[]> = { hi: build('hi'), lo: build('lo') };
   const mat = figureMaterial();
   const group = new Group();
@@ -131,7 +135,7 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
         m.fromArray(shell.matrices, i * 16);
         mesh.setMatrixAt(k++, m);
       }
-      mesh.instanceColor = tints(n, style === 'mannequin' ? CLAY : CLOTH, 31 + v + (d === 'lo' ? 7 : 0), 0.08);
+      mesh.instanceColor = tints(n, PALETTE[style], 31 + v + (d === 'lo' ? 7 : 0), 0.08);
       mesh.castShadow = d === 'hi';
       mesh.receiveShadow = true;
       mesh.computeBoundingSphere();
@@ -140,7 +144,7 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
     }
   }
 
-  const coreMat = new MeshStandardMaterial({ color: style === 'mannequin' ? '#4a4540' : '#6b655b', roughness: 1 });
+  const coreMat = new MeshStandardMaterial({ color: CORE[style], roughness: 1 });
   group.add(core(cone, layers * layerDepth + 0.05, coreMat));
   return {
     group,

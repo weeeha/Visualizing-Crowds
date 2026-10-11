@@ -12,6 +12,7 @@ import {
   RepeatWrapping,
   SphereGeometry,
   SRGBColorSpace,
+  TorusGeometry,
   Vector3,
 } from 'three';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -194,6 +195,100 @@ function layDown(g: BufferGeometry, lie: Pose['lie']): BufferGeometry {
 
 export function lyingMannequins(detail: Detail): BufferGeometry[] {
   return POSES.map((p) => layDown(mannequin(p, PLAIN, detail), p.lie));
+}
+
+const BONE = '#ffffff';
+const SOCKET = '#2e2a25';
+
+/** Skull with dark eye sockets and nasal opening painted into its vertex colours. */
+function skull(parts: BufferGeometry[], detail: Detail) {
+  const hi = detail === 'hi';
+  const g = new SphereGeometry(0.1, hi ? 14 : 6, hi ? 10 : 4).toNonIndexed();
+  g.scale(0.86, 1, 1.05);
+  g.translate(0, 1.63, 0.005);
+  const pos = g.getAttribute('position');
+  const col = new Float32Array(pos.count * 3);
+  const bone = new Color(BONE);
+  const dark = new Color(SOCKET);
+  const holes: [number, number, number][] = [
+    [0.033, 1.635, 0.032], // eyes: x, y, radius
+    [-0.033, 1.635, 0.032],
+    [0, 1.595, 0.018], // nose
+  ];
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const inHole = hi && z > 0.06 && holes.some(([hx, hy, r]) => Math.hypot(x - hx, y - hy) < r);
+    (inHole ? dark : bone).toArray(col, i * 3);
+  }
+  g.setAttribute('color', new BufferAttribute(col, 3));
+  parts.push(g);
+  // Jaw
+  blob(parts, [0, 1.55, 0.03], 0.05, [1.15, 0.55, 1], BONE);
+}
+
+/** Ribs: open hoops, widest mid-chest, gap at the sternum. */
+function ribcage(parts: BufferGeometry[], detail: Detail) {
+  if (detail === 'lo') {
+    blob(parts, [0, 1.24, 0], 0.15, [1.05, 1, 0.7], BONE, 0.12);
+    return;
+  }
+  const widths = [0.1, 0.13, 0.145, 0.15, 0.145, 0.135];
+  widths.forEach((w, i) => {
+    const t = new TorusGeometry(w, 0.011, 3, 10, Math.PI * 1.7);
+    t.rotateZ(Math.PI * 0.65); // put the opening at the front
+    t.rotateX(Math.PI / 2 - 0.25); // lie flat, sloping down at the front like real ribs
+    t.scale(1, 1, 0.72);
+    t.translate(0, 1.38 - i * 0.05, 0);
+    parts.push(paint(t.toNonIndexed(), BONE));
+  });
+}
+
+/** Stylized skeleton in a pose, 1.75 m, feet at y = 0, standing frame. */
+export function skeleton(pose: Pose, detail: Detail = 'hi'): BufferGeometry {
+  seg = SEG[detail];
+  const hi = detail === 'hi';
+  const parts: BufferGeometry[] = [];
+  skull(parts, detail);
+  // Spine: neck to sacrum
+  limb(parts, new Vector3(0, 1.53, -0.03), [0, -1, -0.05], 0.62, 0.02, BONE);
+  ribcage(parts, detail);
+  // Pelvis: a wide flattened ring
+  if (hi) {
+    const p = new TorusGeometry(0.1, 0.03, 5, 12);
+    p.rotateX(Math.PI / 2 - 0.5);
+    p.scale(1.25, 1, 0.75);
+    p.translate(0, 0.94, 0);
+    parts.push(paint(p.toNonIndexed(), BONE));
+  } else {
+    blob(parts, [0, 0.94, 0], 0.11, [1.3, 0.5, 0.8], BONE);
+  }
+  for (const side of [0, 1] as const) {
+    const sx = side === 0 ? 1 : -1;
+    // Clavicle
+    if (hi) limb(parts, new Vector3(0.02 * sx, 1.43, 0.04), [sx, 0.05, -0.25], 0.17, 0.012, BONE);
+    const shoulder = new Vector3(0.19 * sx, 1.4, 0);
+    const elbow = limb(parts, shoulder, pose.upperArm[side], 0.29, 0.018, BONE);
+    const wrist = limb(parts, elbow, pose.foreArm[side], 0.26, 0.015, BONE);
+    if (hi) {
+      blob(parts, [elbow.x, elbow.y, elbow.z], 0.024, [1, 1, 1], BONE);
+      blob(parts, [wrist.x, wrist.y, wrist.z], 0.03, [1, 1.4, 0.5], BONE);
+    }
+    const hip = new Vector3(0.09 * sx, 0.9, 0);
+    const knee = limb(parts, hip, pose.thigh[side], 0.44, 0.024, BONE);
+    const ankle = limb(parts, knee, pose.shin[side], 0.42, 0.02, BONE);
+    if (hi) {
+      blob(parts, [hip.x, hip.y, hip.z], 0.03, [1, 1, 1], BONE);
+      blob(parts, [knee.x, knee.y, knee.z], 0.032, [1, 1, 1], BONE);
+    }
+    blob(parts, [ankle.x, ankle.y - 0.02, ankle.z + 0.06], 0.035, [0.9, 0.45, 2.2], BONE);
+  }
+  return mergeGeometries(parts)!;
+}
+
+export function lyingSkeletons(detail: Detail): BufferGeometry[] {
+  return POSES.map((p) => layDown(skeleton(p, detail), p.lie));
 }
 
 /** Half-width of a wrapped body along its length (m), feet at 0, crown at 1.75. */
