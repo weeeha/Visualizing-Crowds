@@ -82,8 +82,10 @@ export class NearTier implements Layer {
     const d = buildNearTile(this.ctx!.raster, this.crowd!.spacing, this.ctx!.seed, tx, tz);
     if (d.count === 0) return null;
     const g = new THREE.InstancedBufferGeometry();
-    g.index = this.quad.index;
-    g.setAttribute('position', this.quad.getAttribute('position'));
+    // Each tile owns its 4-vertex quad: disposing a shared buffer with one tile would leave the
+    // other tiles' cached vertex-array state pointing at a deleted buffer.
+    g.setIndex(this.quad.index!.clone());
+    g.setAttribute('position', this.quad.getAttribute('position').clone());
     g.setAttribute('aPerson', new THREE.InstancedBufferAttribute(d.person, 4));
     g.setAttribute('aJitter', new THREE.InstancedBufferAttribute(d.jitter, 2));
     g.setAttribute('aLook', new THREE.InstancedBufferAttribute(d.look, 4));

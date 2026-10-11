@@ -4,7 +4,7 @@ export const parseTileKey = (k: string): [number, number] => {
   return [a, b];
 };
 
-const nearDist = (px: number, pz: number, x0: number, z0: number, x1: number, z1: number) =>
+export const nearDist = (px: number, pz: number, x0: number, z0: number, x1: number, z1: number) =>
   Math.hypot(Math.max(x0 - px, 0, px - x1), Math.max(z0 - pz, 0, pz - z1));
 const farDist = (px: number, pz: number, x0: number, z0: number, x1: number, z1: number) =>
   Math.hypot(Math.max(Math.abs(px - x0), Math.abs(px - x1)), Math.max(Math.abs(pz - z0), Math.abs(pz - z1)));

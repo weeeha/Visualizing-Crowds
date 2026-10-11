@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SKY } from '../crowd/palettes';
 import { fillRadius, spacingFor, type FillResult } from '../layout/fillRadius';
 import { occupiedCentroid } from '../layout/occupancy';
+import { rasterBounds } from '../layout/raster';
 import type { SceneState } from '../state';
 import { createAtlas } from './atlas';
 import { CameraRig } from './camera';
@@ -18,6 +19,7 @@ import { createGround, createPlaceFeatures, disposeObject } from './world';
 THREE.ColorManagement.enabled = false;
 
 const FRAME_BUILD_MS = 4;
+const NO_BOUNDS = { minX: 0, minZ: 0, maxX: 0, maxZ: 0 };
 
 export function createScene(container: HTMLElement): CrowdScene | null {
   if (!supportsWebGL2()) return null;
@@ -108,7 +110,15 @@ export function createScene(container: HTMLElement): CrowdScene | null {
     const f: FrameContext = {
       camera: cam,
       lodCenter: cam.position,
-      lod: lodRanges({ density: current?.density ?? 2.5, nearBudget: governor.budget, midBudget: MID_BUDGET, pxPerUnit, camHeight: cam.position.y }),
+      lod: lodRanges({
+        density: current?.density ?? 2.5,
+        nearBudget: governor.budget,
+        midBudget: MID_BUDGET,
+        pxPerUnit,
+        cam: { x: cam.position.x, z: cam.position.z, h: cam.position.y },
+        crowdR: fill.radius,
+        bounds: ctx ? rasterBounds(ctx.raster) : NO_BOUNDS,
+      }),
       pxPerUnit,
       fog: { color: fog.color, near: fog.near, far: fog.far },
       deadline: performance.now() + FRAME_BUILD_MS,
