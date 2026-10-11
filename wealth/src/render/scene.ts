@@ -124,11 +124,17 @@ export function createWealthScene(host: HTMLElement): WealthScene {
   composer.addPass(new RenderPass(scene, camera));
   const ao = new GTAOPass(scene, camera, 1, 1);
   ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1, scale: 1.2 });
+  // Occlusion at half resolution: the pass blends its result over the full-size image, and soft
+  // contact shadows don't need full detail.
+  const aoSetSize = ao.setSize.bind(ao);
+  ao.setSize = (w: number, h: number) => aoSetSize(Math.ceil(w / 2), Math.ceil(h / 2));
   composer.addPass(ao);
   composer.addPass(new OutputPass());
   // Ambient occlusion stays on unless the frame rate holds under 45 for two seconds.
   let aoOn = !new URLSearchParams(location.search).has('noao');
   let slowStats = 0;
+  // Shader compiles and instance uploads make the first frames after a rebuild slow; don't judge those.
+  let graceUntil = performance.now() + 3000;
 
   let heap: Heap | null = null;
   let heapKey = '';
@@ -189,6 +195,7 @@ export function createWealthScene(host: HTMLElement): WealthScene {
     cone = coneFor(s);
     heap = s.mode === 'bodies' ? bodyHeap(cone, s.bodyStyle) : cashHeap(cone);
     scene.add(heap.group);
+    graceUntil = performance.now() + 3000;
 
     topHeight = personById(s.mode === 'bodies' ? 'musk' : s.personId).heightM;
     top.scale.setScalar(topHeight / 1.88);
@@ -296,7 +303,7 @@ export function createWealthScene(host: HTMLElement): WealthScene {
     frames++;
     if (now - lastStat > 500) {
       const fps = (frames * 1000) / (now - lastStat);
-      slowStats = aoOn && fps < 45 && !ease ? slowStats + 1 : 0;
+      slowStats = aoOn && fps < 45 && !ease && now > graceUntil ? slowStats + 1 : 0;
       if (slowStats >= 4) aoOn = false;
       statsCb?.({
         fps: Math.round(fps),
