@@ -1,0 +1,269 @@
+// Procedural models: bill bundles, lying mannequins and shrouds for the heaps, standing figures for
+// the person on top and the scale person. Built in code so there is no asset pipeline to maintain.
+import {
+  BoxGeometry,
+  BufferAttribute,
+  BufferGeometry,
+  CanvasTexture,
+  CapsuleGeometry,
+  Color,
+  MeshStandardMaterial,
+  Quaternion,
+  RepeatWrapping,
+  SphereGeometry,
+  SRGBColorSpace,
+  Vector3,
+} from 'three';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { hash01 } from '../pile/shell';
+
+// ---------- cash ----------
+
+/** $10k strap of $100 bills: 156 × 66 mm, 100 bills ≈ 11 mm. */
+export const BUNDLE = { x: 0.156, y: 0.011, z: 0.066 };
+
+function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return [c, c.getContext('2d')!];
+}
+
+/** Stylized, low-detail note face. Deliberately not a reproduction of real currency. */
+function billFaceTexture(): CanvasTexture {
+  const [c, g] = canvas(256, 108);
+  g.fillStyle = '#c4ccb6';
+  g.fillRect(0, 0, 256, 108);
+  g.strokeStyle = '#7d8a72';
+  g.lineWidth = 3;
+  g.strokeRect(6, 6, 244, 96);
+  g.fillStyle = '#a9b49c';
+  g.beginPath();
+  g.ellipse(84, 54, 26, 34, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#5f6d57';
+  g.font = 'bold 22px system-ui, sans-serif';
+  g.fillText('100', 14, 30);
+  g.fillText('100', 196, 96);
+  // Mustard strap across the short side, the real colour for a $10,000 strap of $100s.
+  g.fillStyle = '#c9a227';
+  g.fillRect(150, 0, 30, 108);
+  g.fillStyle = '#7a6114';
+  g.font = 'bold 10px system-ui, sans-serif';
+  g.save();
+  g.translate(169, 80);
+  g.rotate(-Math.PI / 2);
+  g.fillText('$10,000', 0, 0);
+  g.restore();
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/** Stacked paper edges for the sides of a bundle. */
+function billEdgeTexture(): CanvasTexture {
+  const [c, g] = canvas(64, 64);
+  for (let y = 0; y < 64; y += 2) {
+    g.fillStyle = y % 4 === 0 ? '#d5dbc9' : '#b7c0a9';
+    g.fillRect(0, y, 64, 2);
+  }
+  g.fillStyle = '#c9a227';
+  g.fillRect(36, 0, 8, 64);
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  return t;
+}
+
+export function bundleGeometry(): BoxGeometry {
+  return new BoxGeometry(BUNDLE.x, BUNDLE.y, BUNDLE.z);
+}
+
+/** Box face order: +x, −x, +y, −y, +z, −z. */
+export function bundleMaterials(): MeshStandardMaterial[] {
+  const face = new MeshStandardMaterial({ map: billFaceTexture(), roughness: 0.82 });
+  const edge = new MeshStandardMaterial({ map: billEdgeTexture(), roughness: 0.9 });
+  return [edge, edge, face, face, edge, edge];
+}
+
+/** Bundle-pattern material for the hidden core, so gaps in the shell show more money. */
+export function cashCoreMaterial(): MeshStandardMaterial {
+  const map = billFaceTexture();
+  map.wrapS = map.wrapT = RepeatWrapping;
+  map.repeat.set(220, 60);
+  return new MeshStandardMaterial({ map, color: new Color('#a3ab95'), roughness: 0.95 });
+}
+
+// ---------- people ----------
+
+type V3 = [number, number, number];
+
+interface Pose {
+  /** Directions in the standing frame (Y up, front +Z). Left side is +X. */
+  upperArm: [V3, V3];
+  foreArm: [V3, V3];
+  thigh: [V3, V3];
+  shin: [V3, V3];
+  /** How the body lies on the surface. */
+  lie: 'back' | 'front' | 'side';
+}
+
+export const POSES: Pose[] = [
+  { upperArm: [[0.18, -1, 0], [-0.18, -1, 0]], foreArm: [[0.12, -1, 0.1], [-0.12, -1, 0.1]], thigh: [[0.06, -1, 0], [-0.06, -1, 0]], shin: [[0.04, -1, 0], [-0.04, -1, 0]], lie: 'back' },
+  { upperArm: [[1, -0.35, 0], [-1, -0.25, 0]], foreArm: [[1, -0.1, 0.2], [-1, 0.15, 0]], thigh: [[0.22, -1, 0], [-0.18, -1, 0]], shin: [[0.2, -1, 0], [-0.12, -1, 0]], lie: 'back' },
+  { upperArm: [[0.3, -1, 0], [-0.9, -0.6, 0]], foreArm: [[0.2, -1, 0.3], [-0.6, -1, 0]], thigh: [[0.08, -0.6, 0.8], [-0.08, -1, 0]], shin: [[0.05, -1, -0.15], [-0.05, -1, 0]], lie: 'back' },
+  { upperArm: [[0.1, -0.4, 1], [-0.1, -0.5, 1]], foreArm: [[0, 0.6, 0.7], [0, 0.5, 0.8]], thigh: [[0.05, -0.35, 1], [-0.05, -0.45, 1]], shin: [[0, -1, -0.25], [0, -1, -0.2]], lie: 'side' },
+  { upperArm: [[0.25, 1, 0], [-0.3, -1, 0]], foreArm: [[0.1, 1, 0], [-0.2, -1, 0.2]], thigh: [[0.1, -1, 0], [-0.15, -1, 0.1]], shin: [[0.05, -1, 0], [-0.1, -1, 0]], lie: 'front' },
+];
+
+export const STANDING: Pose = { upperArm: [[0.12, -1, 0], [-0.12, -1, 0]], foreArm: [[0.08, -1, 0.12], [-0.08, -1, 0.12]], thigh: [[0.05, -1, 0], [-0.05, -1, 0]], shin: [[0.03, -1, 0], [-0.03, -1, 0]], lie: 'back' };
+
+export interface Outfit {
+  skin: string;
+  top: string;
+  bottom: string;
+  shoes: string;
+}
+
+const PLAIN: Outfit = { skin: '#ffffff', top: '#ffffff', bottom: '#ffffff', shoes: '#ffffff' };
+
+function paint(g: BufferGeometry, hex: string): BufferGeometry {
+  const c = new Color(hex);
+  const n = g.getAttribute('position').count;
+  const a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3);
+  g.setAttribute('color', new BufferAttribute(a, 3));
+  return g;
+}
+
+/** Capsule from a joint along a direction; returns the far end. */
+export type Detail = 'hi' | 'lo';
+// Segment counts per detail level: capsule cap / radial, sphere width / height.
+const SEG = { hi: { cap: 3, rad: 8, sw: 12, sh: 9 }, lo: { cap: 1, rad: 5, sw: 6, sh: 4 } };
+let seg = SEG.hi;
+
+function limb(parts: BufferGeometry[], from: Vector3, dir: V3, len: number, r: number, hex: string): Vector3 {
+  const d = new Vector3(...dir).normalize();
+  const g = new CapsuleGeometry(r, Math.max(0.001, len - 2 * r), seg.cap, seg.rad);
+  g.applyQuaternion(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), d));
+  const mid = from.clone().addScaledVector(d, len / 2);
+  g.translate(mid.x, mid.y, mid.z);
+  parts.push(paint(g.toNonIndexed(), hex));
+  return from.clone().addScaledVector(d, len);
+}
+
+function blob(parts: BufferGeometry[], at: V3, r: number, scale: V3, hex: string, capLen = 0) {
+  const g = capLen > 0 ? new CapsuleGeometry(r, capLen, seg.cap, seg.rad + 2) : new SphereGeometry(r, seg.sw, seg.sh);
+  g.scale(...scale);
+  g.translate(...at);
+  parts.push(paint(g.toNonIndexed(), hex));
+}
+
+/** Faceless mannequin, 1.75 m, feet at y = 0, standing frame. */
+export function mannequin(pose: Pose, o: Outfit = PLAIN, detail: Detail = 'hi'): BufferGeometry {
+  seg = SEG[detail];
+  const parts: BufferGeometry[] = [];
+  blob(parts, [0, 1.62, 0.01], 0.105, [0.92, 1.08, 1], o.skin);
+  blob(parts, [0, 1.49, 0], 0.05, [1, 1, 1], o.skin, 0.06);
+  blob(parts, [0, 1.2, 0], 0.16, [1.12, 1, 0.66], o.top, 0.3);
+  blob(parts, [0, 0.93, 0], 0.15, [1.1, 1, 0.7], o.bottom, 0.06);
+  for (const side of [0, 1] as const) {
+    const sx = side === 0 ? 1 : -1;
+    const elbow = limb(parts, new Vector3(0.2 * sx, 1.38, 0), pose.upperArm[side], 0.29, 0.052, o.top);
+    const wrist = limb(parts, elbow, pose.foreArm[side], 0.26, 0.044, o.top);
+    if (detail === 'hi') blob(parts, [wrist.x, wrist.y, wrist.z], 0.045, [1, 1.2, 0.7], o.skin);
+    const knee = limb(parts, new Vector3(0.09 * sx, 0.9, 0), pose.thigh[side], 0.44, 0.075, o.bottom);
+    const ankle = limb(parts, knee, pose.shin[side], 0.42, 0.056, o.bottom);
+    blob(parts, [ankle.x, ankle.y - 0.02, ankle.z + 0.06], 0.05, [1, 0.7, 2], o.shoes);
+  }
+  return mergeGeometries(parts)!;
+}
+
+/** Rotate a standing-frame body so it lies with its thickness along +Y, lowest point at y ≈ −0.04. */
+function layDown(g: BufferGeometry, lie: Pose['lie']): BufferGeometry {
+  g.translate(0, -0.9, 0); // center the body along its length
+  if (lie === 'back') g.rotateX(-Math.PI / 2);
+  else if (lie === 'front') g.rotateX(Math.PI / 2);
+  else {
+    g.rotateZ(Math.PI / 2);
+  }
+  g.computeBoundingBox();
+  g.translate(0, -g.boundingBox!.min.y - 0.04, 0);
+  return g;
+}
+
+export function lyingMannequins(detail: Detail): BufferGeometry[] {
+  return POSES.map((p) => layDown(mannequin(p, PLAIN, detail), p.lie));
+}
+
+/** Half-width of a wrapped body along its length (m), feet at 0, crown at 1.75. */
+const SHROUD_PROFILE: [number, number][] = [
+  [0, 0.05], [0.05, 0.1], [0.25, 0.11], [0.5, 0.13], [0.75, 0.16], [0.95, 0.19], [1.1, 0.18],
+  [1.3, 0.21], [1.42, 0.22], [1.5, 0.13], [1.55, 0.09], [1.62, 0.11], [1.7, 0.1], [1.75, 0.04], [1.77, 0],
+];
+const TIES = [0.22, 0.97, 1.55]; // aligned to the hi-detail rings
+
+function profileAt(y: number): number {
+  for (let i = 1; i < SHROUD_PROFILE.length; i++) {
+    const [y1, w1] = SHROUD_PROFILE[i];
+    const [y0, w0] = SHROUD_PROFILE[i - 1];
+    if (y <= y1) return w0 + ((y - y0) / (y1 - y0)) * (w1 - w0);
+  }
+  return 0;
+}
+
+/** Wrapped bodies: elliptical cross-sections along a body profile, cloth folds, three ties. */
+export function shrouds(detail: Detail): BufferGeometry[] {
+  const hi = detail === 'hi';
+  const rings = hi ? 40 : 12;
+  const around = hi ? 16 : 6;
+  return [0, 1, 2, 3, 4].map((v) => {
+    const pos: number[] = [];
+    const col: number[] = [];
+    const cloth = new Color('#ffffff');
+    const tie = new Color('#a39a8a');
+    const ring = (j: number) => {
+      const y = (j / rings) * 1.77;
+      const w = profileAt(y);
+      const head = y > 1.5;
+      const pts: [number, number, number][] = [];
+      for (let k = 0; k < around; k++) {
+        const a = (k / around) * Math.PI * 2;
+        const fold = hi ? 1 + 0.06 * Math.sin(a * 3 + y * 17 + v) + 0.04 * (hash01(j, k, v, 9) - 0.5) : 1;
+        // Flatter front to back on the body, rounder at the head.
+        pts.push([Math.cos(a) * w * fold, y, Math.sin(a) * w * (head ? 0.95 : 0.6) * fold]);
+      }
+      return { pts, isTie: TIES.some((t) => Math.abs(y - t) < 0.018) };
+    };
+    let prev = ring(0);
+    for (let j = 1; j <= rings; j++) {
+      const cur = ring(j);
+      const c = prev.isTie || cur.isTie ? tie : cloth;
+      for (let k = 0; k < around; k++) {
+        const k2 = (k + 1) % around;
+        pos.push(...prev.pts[k], ...cur.pts[k], ...cur.pts[k2], ...prev.pts[k], ...cur.pts[k2], ...prev.pts[k2]);
+        for (let n = 0; n < 6; n++) col.push(c.r, c.g, c.b);
+      }
+      prev = cur;
+    }
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+    g.setAttribute('color', new BufferAttribute(new Float32Array(col), 3));
+    const smooth = mergeVertices(g);
+    smooth.computeVertexNormals();
+    return layDown(smooth, v % 2 === 0 ? 'back' : 'side');
+  });
+}
+
+export function figureMaterial(): MeshStandardMaterial {
+  return new MeshStandardMaterial({ vertexColors: true, roughness: 0.8 });
+}
+
+export const MUSK_OUTFIT: Outfit = { skin: '#c9a58a', top: '#2b2925', bottom: '#2f2d29', shoes: '#1d1c1a' };
+export const SCALE_OUTFIT: Outfit = { skin: '#b98d6e', top: '#4f6d8f', bottom: '#3a3a3a', shoes: '#2b2925' };
+
+export function standingFigure(outfit: Outfit, heightM: number): BufferGeometry {
+  const g = mannequin(STANDING, outfit);
+  g.scale(heightM / 1.75, heightM / 1.75, heightM / 1.75);
+  return g;
+}
