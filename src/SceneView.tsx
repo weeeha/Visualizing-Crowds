@@ -5,12 +5,19 @@ import type { SceneState, Store } from './state';
 
 export function SceneView({ store, stats }: { store: Store<SceneState>; stats: Store<{ value: SceneStats | null }> }) {
   const ref = useRef<HTMLElement>(null);
-  const [unsupported, setUnsupported] = useState(false);
+  const [problem, setProblem] = useState<null | 'unsupported' | 'failed'>(null);
 
   useEffect(() => {
-    const scene = createScene(ref.current!);
+    let scene: ReturnType<typeof createScene>;
+    try {
+      scene = createScene(ref.current!);
+    } catch (err) {
+      console.warn('Scene failed to start', err);
+      setProblem('failed');
+      return;
+    }
     if (!scene) {
-      setUnsupported(true);
+      setProblem('unsupported');
       return;
     }
     scene.update(store.get());
@@ -25,7 +32,8 @@ export function SceneView({ store, stats }: { store: Store<SceneState>; stats: S
 
   return (
     <main className="scene" data-testid="scene" ref={ref}>
-      {unsupported && <p className="scene-msg">This needs WebGL2, try a recent Chrome or Safari.</p>}
+      {problem === 'unsupported' && <p className="scene-msg">This needs WebGL2, try a recent Chrome or Safari.</p>}
+      {problem === 'failed' && <p className="scene-msg">The 3D view could not start in this browser.</p>}
     </main>
   );
 }

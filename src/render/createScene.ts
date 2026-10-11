@@ -38,7 +38,16 @@ export function createScene(container: HTMLElement): CrowdScene | null {
   scene.add(createGround());
 
   // Order matters: near builds first each frame so it gets the tile-building budget.
-  const layers: Layer[] = [new NearTier(createAtlas()), new MidTier(), new FarTier()];
+  let layers: Layer[];
+  try {
+    layers = [new NearTier(createAtlas()), new MidTier(), new FarTier()];
+  } catch (err) {
+    // Release the half-built renderer so a failed start leaves no canvas or GL context behind.
+    renderer.dispose();
+    renderer.forceContextLoss();
+    renderer.domElement.remove();
+    throw err;
+  }
   for (const l of layers) scene.add(l.object);
 
   let current: SceneState | null = null;

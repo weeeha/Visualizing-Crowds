@@ -45,3 +45,33 @@ test('highlight toggle writes hl to the URL', async ({ page }) => {
   await page.getByLabel('Highlight 1 in').check();
   await expect(page).toHaveURL(/hl=50/);
 });
+
+test('highlight ratio accepts multi-digit values like 100', async ({ page }) => {
+  await page.goto('/?hl=50');
+  const ratio = page.getByLabel('Highlight ratio');
+  await ratio.selectText();
+  await ratio.press('Backspace');
+  await ratio.pressSequentially('100'); // typed like a person: "1", "10", "100"
+  await ratio.press('Enter');
+  await expect(page).toHaveURL(/hl=100/);
+});
+
+test('overflow status is correct immediately, not after the next stats tick', async ({ page }) => {
+  await page.goto('/?place=times-square&count=1000000');
+  await expect(page.getByRole('status')).toContainText('Overflow: Times Square holds about 15,988', { timeout: 150 });
+  await page.getByRole('radio', { name: 'Michigan Stadium' }).click();
+  await expect(page.getByRole('status')).toContainText('Overflow: Michigan Stadium holds about 119,170', { timeout: 150 });
+});
+
+test('typed count snaps to the formatted value even when the count does not change', async ({ page }) => {
+  await page.goto('/?count=50');
+  const input = page.getByLabel('Exact people count');
+  await input.fill('-5');
+  await input.press('Enter');
+  await expect(input).toHaveValue('50');
+});
+
+test('credits OpenStreetMap for place outlines', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('link', { name: 'OpenStreetMap contributors' })).toHaveAttribute('href', 'https://www.openstreetmap.org/copyright');
+});

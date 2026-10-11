@@ -36,3 +36,14 @@ test('shows a message without WebGL2 and keeps the sidebar', async ({ page }) =>
   await expect(page.getByText('This needs WebGL2, try a recent Chrome or Safari.')).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Crowd controls' })).toBeVisible();
 });
+
+test('a scene startup error shows a message and keeps the sidebar', async ({ page }) => {
+  await page.addInitScript(() => {
+    // Older Safari has no roundRect; the atlas build throws without it.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (CanvasRenderingContext2D.prototype as any).roundRect = undefined;
+  });
+  await page.goto('/');
+  await expect(page.getByText('The 3D view could not start in this browser.')).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Crowd controls' })).toBeVisible();
+});

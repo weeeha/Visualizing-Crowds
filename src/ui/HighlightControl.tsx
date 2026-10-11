@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 export function HighlightControl({
   value,
   onChange,
@@ -6,6 +8,16 @@ export function HighlightControl({
   onChange: (v: null | { oneIn: number }) => void;
 }) {
   const oneIn = value?.oneIn ?? 50;
+  // Local text so partial input ("1" on the way to "100", or empty) is allowed while typing.
+  const [text, setText] = useState(String(oneIn));
+  useEffect(() => setText(String(oneIn)), [oneIn]);
+  const commit = () => {
+    const n = Math.round(Number(text));
+    if (value === null || !Number.isFinite(n) || text.trim() === '') return setText(String(oneIn));
+    const next = Math.max(2, n);
+    setText(String(next));
+    if (next !== oneIn) onChange({ oneIn: next });
+  };
   return (
     <div className="highlight">
       <label>
@@ -17,12 +29,11 @@ export function HighlightControl({
         aria-label="Highlight ratio"
         min={2}
         step={1}
-        value={oneIn}
+        value={text}
         disabled={value === null}
-        onChange={(e) => {
-          const n = Math.round(Number(e.target.value));
-          if (Number.isFinite(n) && n >= 2) onChange({ oneIn: n });
-        }}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
       />
     </div>
   );

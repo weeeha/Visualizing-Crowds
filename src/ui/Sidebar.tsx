@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
+import { fillRadius } from '../layout/fillRadius';
+import { countProfile } from '../render/placeCache';
 import { PLACES, getPlace } from '../places/index';
 import type { SceneStats } from '../render/types';
 import type { Density, SceneState, Store } from '../state';
@@ -30,8 +32,10 @@ export function Sidebar({ store, stats, debug }: { store: Store<SceneState>; sta
   const st = useStore(stats).value;
   const lines = compareLines(s.count);
   const setCamera = (preset: 'aerial' | 'eye') => store.set({ camera: { preset, nonce: s.camera.nonce + 1 } });
-  const status = st?.overflow ? (
-    <span className="warn">Overflow: {getPlace(s.placeId).name} holds about {formatCount(st.capacity)} at this density.</span>
+  // Derived from state, not from the scene's 500 ms stats tick, so it is right on the first render after a change.
+  const fill = useMemo(() => fillRadius(countProfile(s.placeId, s.density), s.count), [s.placeId, s.density, s.count]);
+  const status = fill.overflow ? (
+    <span className="warn">Overflow: {getPlace(s.placeId).name} holds about {formatCount(fill.capacity)} at this density.</span>
   ) : (
     'people'
   );
@@ -61,6 +65,9 @@ export function Sidebar({ store, stats, debug }: { store: Store<SceneState>; sta
       <Section label="Highlight">
         <HighlightControl value={s.highlight} onChange={(highlight) => store.set({ highlight })} />
       </Section>
+      <p className="credit">
+        Place outlines: <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>
+      </p>
       {debug && st && (
         <p className="debug">
           {st.fps} fps · {formatCount(st.nearSprites)} sprites · {formatCount(st.midPoints)} dots · r {Math.round(st.radius)} m

@@ -10,8 +10,8 @@ export function CountControl({ count, onChange, status }: { count: number; onCha
   useEffect(() => setText(formatCount(count)), [count]);
   const commit = () => {
     const n = parseCount(text);
-    if (n === null) setText(formatCount(count));
-    else onChange(n);
+    setText(formatCount(n ?? count)); // always show the committed value, even when the count is unchanged
+    if (n !== null) onChange(n);
   };
   return (
     <div className="count">
