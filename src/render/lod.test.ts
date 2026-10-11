@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { BudgetGovernor, lodRanges } from './lod';
+import { BudgetGovernor, groundRadius, lodRanges } from './lod';
 
 describe('lodRanges', () => {
-  const base = { density: 2.5, nearBudget: 400_000, midBudget: 1_500_000, pxPerUnit: 1000 };
+  const base = { density: 2.5, nearBudget: 400_000, midBudget: 1_500_000, pxPerUnit: 1000, camHeight: 20 };
 
-  it('keeps near sprites within budget', () => {
+  it('keeps near sprites within budget on the ground', () => {
     const r = lodRanges(base);
-    expect(Math.PI * r.nearEnd ** 2 * base.density).toBeLessThanOrEqual(400_000 * 1.0001);
+    const g = groundRadius(r.nearEnd, base.camHeight);
+    expect(Math.PI * g ** 2 * base.density).toBeLessThanOrEqual(400_000 * 1.0001);
   });
 
   it('orders the bands', () => {
@@ -18,6 +19,19 @@ describe('lodRanges', () => {
 
   it('shrinks with a smaller budget', () => {
     expect(lodRanges({ ...base, nearBudget: 100_000 }).nearEnd).toBeLessThan(lodRanges(base).nearEnd);
+  });
+
+  it('draws no sprites or dots from high above, where people are under a pixel', () => {
+    const r = lodRanges({ ...base, camHeight: 5000 });
+    expect(groundRadius(r.nearEnd, 5000)).toBe(0);
+    expect(groundRadius(r.midEnd, 5000)).toBe(0);
+  });
+});
+
+describe('groundRadius', () => {
+  it('is the ground circle a 3D sphere cuts at camera height', () => {
+    expect(groundRadius(50, 30)).toBeCloseTo(40, 9);
+    expect(groundRadius(20, 30)).toBe(0);
   });
 });
 

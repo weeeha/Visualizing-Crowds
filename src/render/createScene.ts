@@ -6,6 +6,8 @@ import type { SceneState } from '../state';
 import { createAtlas } from './atlas';
 import { CameraRig } from './camera';
 import { BudgetGovernor, lodRanges, MID_BUDGET } from './lod';
+import { FarTier } from './farTier';
+import { MidTier } from './midTier';
 import { NearTier } from './nearTier';
 import { countProfile, placeContext } from './placeCache';
 import type { CrowdScene, FrameContext, Layer, PlaceContext, SceneStats } from './types';
@@ -33,7 +35,8 @@ export function createScene(container: HTMLElement): CrowdScene | null {
   const rig = new CameraRig(renderer.domElement);
   scene.add(createGround());
 
-  const layers: Layer[] = [new NearTier(createAtlas())];
+  // Order matters: near builds first each frame so it gets the tile-building budget.
+  const layers: Layer[] = [new NearTier(createAtlas()), new MidTier(), new FarTier()];
   for (const l of layers) scene.add(l.object);
 
   let current: SceneState | null = null;
@@ -77,13 +80,6 @@ export function createScene(container: HTMLElement): CrowdScene | null {
   observer.observe(container);
   resize();
 
-  // LOD center: where a ray through the lower-middle of the screen hits the ground.
-  // That is where the viewer sees people largest, between the camera and the orbit target.
-  const lodCenter = new THREE.Vector2();
-  const LOD_NDC = new THREE.Vector2(0, -0.4);
-  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  const raycaster = new THREE.Raycaster();
-  const hit = new THREE.Vector3();
   let frames = 0, lastStats = performance.now(), raf = 0;
 
   function emitStats(fps: number): void {
@@ -105,17 +101,14 @@ export function createScene(container: HTMLElement): CrowdScene | null {
     raf = requestAnimationFrame(loop);
     rig.tick(now);
     const cam = rig.camera, target = rig.controls.target;
-    raycaster.setFromCamera(LOD_NDC, cam);
-    if (raycaster.ray.intersectPlane(groundPlane, hit)) lodCenter.set(hit.x, hit.z);
-    else lodCenter.set(target.x, target.z);
     const d = cam.position.distanceTo(target);
     fog.near = d * 3;
     fog.far = d * 14 + 500;
     const pxPerUnit = renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)));
     const f: FrameContext = {
       camera: cam,
-      lodCenter,
-      lod: lodRanges({ density: current?.density ?? 2.5, nearBudget: governor.budget, midBudget: MID_BUDGET, pxPerUnit }),
+      lodCenter: cam.position,
+      lod: lodRanges({ density: current?.density ?? 2.5, nearBudget: governor.budget, midBudget: MID_BUDGET, pxPerUnit, camHeight: cam.position.y }),
       pxPerUnit,
       fog: { color: fog.color, near: fog.near, far: fog.far },
       deadline: performance.now() + FRAME_BUILD_MS,

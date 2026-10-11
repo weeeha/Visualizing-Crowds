@@ -5,6 +5,7 @@ import { rasterBounds } from '../layout/raster';
 import type { Atlas } from './atlas';
 import { NEAR_FRAG, NEAR_VERT } from './shaders/near';
 import { TileManager, type BuiltTile } from './tileManager';
+import { groundRadius } from './lod';
 import { tilesInRange } from './tileSet';
 import type { CrowdParams, FrameContext, Layer, PlaceContext } from './types';
 import { applyFog, fogUniforms, paletteUniforms } from './uniforms';
@@ -26,7 +27,7 @@ export class NearTier implements Layer {
       uniforms: {
         uAtlas: { value: atlas.weights },
         uShadow: { value: atlas.shadow },
-        uLodCenter: { value: new THREE.Vector2() },
+        uLodCenter: { value: new THREE.Vector3() },
         uFadeStart: { value: 0 },
         uFadeEnd: { value: 1 },
         uRadius: { value: 0 },
@@ -58,11 +59,12 @@ export class NearTier implements Layer {
   frame(f: FrameContext): void {
     if (!this.ctx || !this.crowd) return;
     const u = this.material.uniforms;
-    (u.uLodCenter.value as THREE.Vector2).copy(f.lodCenter);
+    (u.uLodCenter.value as THREE.Vector3).copy(f.lodCenter);
     u.uFadeStart.value = f.lod.nearStart;
     u.uFadeEnd.value = f.lod.nearEnd;
     applyFog(u, f);
-    const wanted = tilesInRange({ x: f.lodCenter.x, z: f.lodCenter.y }, f.lod.nearEnd, 0, this.crowd.radius, NEAR_TILE, rasterBounds(this.ctx.raster));
+    const h = f.lodCenter.y;
+    const wanted = tilesInRange({ x: f.lodCenter.x, z: f.lodCenter.z }, groundRadius(f.lod.nearEnd, h), 0, this.crowd.radius, NEAR_TILE, rasterBounds(this.ctx.raster));
     this.tiles.sync(wanted, f.deadline);
   }
 

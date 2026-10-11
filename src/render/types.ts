@@ -24,7 +24,8 @@ export interface CrowdParams { radius: number; spacing: number; highlight: null 
 
 export interface FrameContext {
   camera: THREE.PerspectiveCamera;
-  lodCenter: THREE.Vector2;
+  /** Camera position: every tier measures 3D distance from here so on-screen size decides the tier. */
+  lodCenter: THREE.Vector3;
   lod: LodRanges;
   pxPerUnit: number;
   fog: { color: THREE.Color; near: number; far: number };

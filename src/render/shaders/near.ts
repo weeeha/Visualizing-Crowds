@@ -11,7 +11,7 @@ in vec2 aJitter;
 in vec4 aLook;   // shirt, pants, skin, hair
 in vec2 aRand;   // lod dissolve, highlight pick
 uniform vec3 uCamPos;
-uniform vec2 uLodCenter;
+uniform vec3 uLodCenter; // camera position
 uniform float uFadeStart;
 uniform float uFadeEnd;
 uniform float uRadius;
@@ -23,7 +23,7 @@ flat out ivec4 vLook;
 flat out int vPick;
 void main() {
   vec2 center = aPerson.xy;
-  float fade = smoothstep(uFadeStart, uFadeEnd, distance(center, uLodCenter));
+  float fade = smoothstep(uFadeStart, uFadeEnd, distance(vec3(center.x, 0.0, center.y), uLodCenter));
   if (length(center) >= uRadius || aRand.x < fade) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   vec3 base = vec3(center.x + aJitter.x, 0.0, center.y + aJitter.y);
   vec2 toCam = normalize(uCamPos.xz - base.xz);
