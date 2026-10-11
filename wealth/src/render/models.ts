@@ -13,6 +13,8 @@ import {
   SphereGeometry,
   SRGBColorSpace,
   TorusGeometry,
+  TubeGeometry,
+  CatmullRomCurve3,
   Vector3,
 } from 'three';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -203,7 +205,7 @@ const SOCKET = '#2e2a25';
 /** Skull with dark eye sockets and nasal opening painted into its vertex colours. */
 function skull(parts: BufferGeometry[], detail: Detail) {
   const hi = detail === 'hi';
-  const g = new SphereGeometry(0.1, hi ? 14 : 6, hi ? 10 : 4).toNonIndexed();
+  const g = new SphereGeometry(0.1, hi ? 14 : 5, hi ? 10 : 4).toNonIndexed();
   g.scale(0.86, 1, 1.05);
   g.translate(0, 1.63, 0.005);
   const pos = g.getAttribute('position');
@@ -225,38 +227,50 @@ function skull(parts: BufferGeometry[], detail: Detail) {
   g.setAttribute('color', new BufferAttribute(col, 3));
   parts.push(g);
   // Jaw
-  blob(parts, [0, 1.55, 0.03], 0.05, [1.15, 0.55, 1], BONE);
+  if (hi) blob(parts, [0, 1.55, 0.03], 0.05, [1.15, 0.55, 1], BONE);
 }
 
-/** Ribs: open hoops, widest mid-chest, gap at the sternum. */
+/** Rib pairs curving from the spine round to the sternum; the lowest pair floats free at the front. */
 function ribcage(parts: BufferGeometry[], detail: Detail) {
   if (detail === 'lo') {
-    blob(parts, [0, 1.24, 0], 0.15, [1.05, 1, 0.7], BONE, 0.12);
+    blob(parts, [0, 1.24, -0.01], 0.14, [1.05, 1, 0.7], BONE, 0.1);
     return;
   }
-  const widths = [0.1, 0.13, 0.145, 0.15, 0.145, 0.135];
+  const widths = [0.105, 0.13, 0.145, 0.148, 0.14];
   widths.forEach((w, i) => {
-    const t = new TorusGeometry(w, 0.011, 3, 10, Math.PI * 1.7);
-    t.rotateZ(Math.PI * 0.65); // put the opening at the front
-    t.rotateX(Math.PI / 2 - 0.25); // lie flat, sloping down at the front like real ribs
-    t.scale(1, 1, 0.72);
-    t.translate(0, 1.38 - i * 0.05, 0);
-    parts.push(paint(t.toNonIndexed(), BONE));
+    const y = 1.4 - i * 0.055;
+    const drop = 0.1 + i * 0.012;
+    for (const sx of [1, -1]) {
+      const pts = [
+        new Vector3(0.02 * sx, y, -0.075),
+        new Vector3(0.75 * w * sx, y + 0.005, -0.06),
+        new Vector3(w * sx, y - 0.03, 0),
+        new Vector3(0.8 * w * sx, y - 0.07, 0.07),
+      ];
+      if (i < widths.length - 1) pts.push(new Vector3(0.035 * sx, y - drop, 0.095));
+      const tube = new TubeGeometry(new CatmullRomCurve3(pts), 6, 0.009, 3, false);
+      parts.push(paint(tube.toNonIndexed(), BONE));
+    }
   });
+  // Sternum
+  limb(parts, new Vector3(0, 1.32, 0.1), [0, -1, -0.05], 0.2, 0.014, BONE);
 }
 
 /** Stylized skeleton in a pose, 1.75 m, feet at y = 0, standing frame. */
+// Bones are thin, so they need far fewer segments than the mannequin's limbs.
+const SEG_BONE = { hi: { cap: 1, rad: 5, sw: 6, sh: 4 }, lo: { cap: 1, rad: 3, sw: 4, sh: 3 } };
+
 export function skeleton(pose: Pose, detail: Detail = 'hi'): BufferGeometry {
-  seg = SEG[detail];
+  seg = SEG_BONE[detail];
   const hi = detail === 'hi';
   const parts: BufferGeometry[] = [];
   skull(parts, detail);
   // Spine: neck to sacrum
-  limb(parts, new Vector3(0, 1.53, -0.03), [0, -1, -0.05], 0.62, 0.02, BONE);
+  limb(parts, new Vector3(0, 1.53, -0.05), [0, -1, -0.04], 0.62, 0.02, BONE);
   ribcage(parts, detail);
   // Pelvis: a wide flattened ring
   if (hi) {
-    const p = new TorusGeometry(0.1, 0.03, 5, 12);
+    const p = new TorusGeometry(0.1, 0.03, 4, 10);
     p.rotateX(Math.PI / 2 - 0.5);
     p.scale(1.25, 1, 0.75);
     p.translate(0, 0.94, 0);
@@ -270,19 +284,17 @@ export function skeleton(pose: Pose, detail: Detail = 'hi'): BufferGeometry {
     if (hi) limb(parts, new Vector3(0.02 * sx, 1.43, 0.04), [sx, 0.05, -0.25], 0.17, 0.012, BONE);
     const shoulder = new Vector3(0.19 * sx, 1.4, 0);
     const elbow = limb(parts, shoulder, pose.upperArm[side], 0.29, 0.018, BONE);
-    const wrist = limb(parts, elbow, pose.foreArm[side], 0.26, 0.015, BONE);
+    limb(parts, elbow, pose.foreArm[side], 0.26, 0.015, BONE);
     if (hi) {
       blob(parts, [elbow.x, elbow.y, elbow.z], 0.024, [1, 1, 1], BONE);
-      blob(parts, [wrist.x, wrist.y, wrist.z], 0.03, [1, 1.4, 0.5], BONE);
     }
     const hip = new Vector3(0.09 * sx, 0.9, 0);
     const knee = limb(parts, hip, pose.thigh[side], 0.44, 0.024, BONE);
     const ankle = limb(parts, knee, pose.shin[side], 0.42, 0.02, BONE);
     if (hi) {
-      blob(parts, [hip.x, hip.y, hip.z], 0.03, [1, 1, 1], BONE);
       blob(parts, [knee.x, knee.y, knee.z], 0.032, [1, 1, 1], BONE);
     }
-    blob(parts, [ankle.x, ankle.y - 0.02, ankle.z + 0.06], 0.035, [0.9, 0.45, 2.2], BONE);
+    if (hi) blob(parts, [ankle.x, ankle.y - 0.02, ankle.z + 0.06], 0.035, [0.9, 0.45, 2.2], BONE);
   }
   return mergeGeometries(parts)!;
 }
