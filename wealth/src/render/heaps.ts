@@ -13,7 +13,7 @@ import {
 } from 'three';
 import { buildShell, hash01 } from '../pile/shell';
 import { REPOSE_DEG, type Cone } from '../pile/volume';
-import { BUNDLE, bundleGeometry, bundleMaterials, cashCoreMaterial, figureMaterial, lyingMannequins, shrouds, type Detail } from './models';
+import { BUNDLE, bundleGeometry, bundleMaterials, cashCoreMaterial, figureMaterial, farBody, lyingMannequins, shrouds, type Detail } from './models';
 
 export type BodyStyle = 'mannequin' | 'shroud';
 
@@ -46,6 +46,8 @@ function tints(count: number, palette: string[], seed: number, jitter: number): 
   return new InstancedBufferAttribute(a, 3);
 }
 
+const INNER_LAYER_SLANT_M = 10;
+
 export function cashHeap(cone: Cone): Heap {
   const layers = 2;
   const layerDepth = BUNDLE.y * 1.6;
@@ -61,9 +63,13 @@ export function cashHeap(cone: Cone): Heap {
   });
   const geo = bundleGeometry();
   const mats = bundleMaterials();
-  const mesh = new InstancedMesh(geo, mats, shell.count);
-  mesh.instanceMatrix.array.set(shell.matrices);
-  mesh.instanceColor = tints(shell.count, ['#ffffff', '#f2f0e6', '#e6eadc'], 5, 0.12);
+  // The inner layer only matters where the camera can get close (near the peak). Lower down, the
+  // bundle-textured core fills any gaps, so drop it there: roughly halves the instance count.
+  const keep: number[] = [];
+  for (let i = 0; i < shell.count; i++) if (shell.layer[i] === 0 || shell.slant[i] < INNER_LAYER_SLANT_M) keep.push(i);
+  const mesh = new InstancedMesh(geo, mats, keep.length);
+  keep.forEach((i, k) => mesh.instanceMatrix.array.set(shell.matrices.subarray(i * 16, i * 16 + 16), k * 16));
+  mesh.instanceColor = tints(keep.length, ['#ffffff', '#f2f0e6', '#e6eadc'], 5, 0.12);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.computeBoundingSphere();
@@ -73,7 +79,7 @@ export function cashHeap(cone: Cone): Heap {
   group.add(core(cone, layers * layerDepth + 0.01, coreMat), mesh);
   return {
     group,
-    instances: shell.count,
+    instances: keep.length,
     dispose() {
       geo.dispose();
       mats.forEach((m) => {
@@ -91,7 +97,10 @@ export function cashHeap(cone: Cone): Heap {
 const CLAY = ['#b9b1a6', '#a89f94', '#c7c0b6', '#9d958b', '#8f877d'];
 const CLOTH = ['#e8e2d6', '#ddd6c8', '#d2cab9', '#e3dccd'];
 
+// Detail by distance down the slope from the peak, where the camera always orbits.
 const HI_DETAIL_SLANT_M = 20;
+const FAR_SLANT_M = 45;
+type Tier = Detail | 'far';
 
 export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
   const layers = 2;
@@ -108,19 +117,25 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
     scale: (r) => (r < 0.55 ? 0.5 + (r / 0.55) * 0.3 : 0.9 + ((r - 0.55) / 0.45) * 0.15),
   });
 
-  // The camera always orbits the peak, so only bodies near it are ever seen up close.
-  // Those get full detail and cast shadows; the rest of the flank uses a light mesh.
+  // Near the peak: full detail, casting shadows. Mid-slope: a light mesh. Far down the slope (only
+  // the larger estimates reach it): a simple form, outer layer only; the dark core fills the gaps.
   const build = (d: Detail) => (style === 'mannequin' ? lyingMannequins(d) : shrouds(d));
-  const geos: Record<Detail, BufferGeometry[]> = { hi: build('hi'), lo: build('lo') };
+  const geos: Record<Tier, BufferGeometry[]> = { hi: build('hi'), lo: build('lo'), far: [farBody()] };
   const mat = figureMaterial();
   const group = new Group();
   const meshes: InstancedMesh[] = [];
   const m = new Matrix4();
-  const detailOf = (i: number): Detail => (shell.slant[i] < HI_DETAIL_SLANT_M ? 'hi' : 'lo');
+  const tierOf = (i: number): Tier | null => {
+    const sl = shell.slant[i];
+    if (sl < HI_DETAIL_SLANT_M) return 'hi';
+    if (sl < FAR_SLANT_M) return 'lo';
+    return shell.layer[i] === 0 ? 'far' : null;
+  };
+  let drawn = 0;
 
-  for (const d of ['hi', 'lo'] as const) {
+  for (const d of ['hi', 'lo', 'far'] as const) {
     for (let v = 0; v < geos[d].length; v++) {
-      const pick = (i: number) => shell.variants[i] === v && detailOf(i) === d;
+      const pick = (i: number) => tierOf(i) === d && (d === 'far' || shell.variants[i] === v);
       let n = 0;
       for (let i = 0; i < shell.count; i++) if (pick(i)) n++;
       if (n === 0) continue;
@@ -137,6 +152,7 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
       mesh.computeBoundingSphere();
       meshes.push(mesh);
       group.add(mesh);
+      drawn += n;
     }
   }
 
@@ -144,9 +160,9 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
   group.add(core(cone, layers * layerDepth + 0.05, coreMat));
   return {
     group,
-    instances: shell.count,
+    instances: drawn,
     dispose() {
-      [...geos.hi, ...geos.lo].forEach((g) => g.dispose());
+      [...geos.hi, ...geos.lo, ...geos.far].forEach((g) => g.dispose());
       meshes.forEach((x) => x.dispose());
       mat.dispose();
       coreMat.dispose();

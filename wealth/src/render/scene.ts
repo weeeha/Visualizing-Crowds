@@ -39,8 +39,9 @@ export interface WealthState {
 }
 
 export interface Stats {
+  /** Frame rate during the last stretch of camera motion; 0 until the camera has moved. */
   fps: number;
-  ao: boolean;
+  moving: boolean;
   instances: number;
   heap: { radius: number; height: number };
 }
@@ -57,6 +58,8 @@ export interface WealthScene {
   onStats(cb: (s: Stats) => void): void;
   /** Screen positions for HTML labels: the person on top and the scale person. */
   onAnchors(cb: (a: { top: ScreenAnchor; base: ScreenAnchor }) => void): void;
+  /** Debug: render n orbiting frames synchronously, return median ms per frame (moving and settled paths). */
+  bench(n: number): { moving: number; settled: number };
 }
 
 const PAPER = '#f4f2ee';
@@ -83,6 +86,8 @@ export function createWealthScene(host: HTMLElement): WealthScene {
   renderer.toneMapping = NeutralToneMapping;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
+  // Nothing in the scene moves except the camera, so the shadow map is drawn once per pile.
+  renderer.shadowMap.autoUpdate = false;
   host.appendChild(renderer.domElement);
 
   const scene = new Scene();
@@ -130,11 +135,19 @@ export function createWealthScene(host: HTMLElement): WealthScene {
   ao.setSize = (w: number, h: number) => aoSetSize(Math.ceil(w / 2), Math.ceil(h / 2));
   composer.addPass(ao);
   composer.addPass(new OutputPass());
-  // Ambient occlusion stays on unless the frame rate holds under 45 for two seconds.
-  let aoOn = !new URLSearchParams(location.search).has('noao');
-  let slowStats = 0;
-  // Shader compiles and instance uploads make the first frames after a rebuild slow; don't judge those.
-  let graceUntil = performance.now() + 3000;
+  const aoOn = !new URLSearchParams(location.search).has('noao');
+
+  // Render on demand. While the camera moves, frames skip ambient occlusion (it re-renders the whole
+  // scene for depth and normals); once the camera has been still for SETTLE_MS, one frame adds it.
+  let dirty = true;
+  let settled = false;
+  let lastMove = 0;
+  function invalidate() {
+    dirty = true;
+    settled = false;
+    lastMove = performance.now();
+  }
+  controls.addEventListener('change', invalidate);
 
   let heap: Heap | null = null;
   let heapKey = '';
@@ -195,7 +208,8 @@ export function createWealthScene(host: HTMLElement): WealthScene {
     cone = coneFor(s);
     heap = s.mode === 'bodies' ? bodyHeap(cone, s.bodyStyle) : cashHeap(cone);
     scene.add(heap.group);
-    graceUntil = performance.now() + 3000;
+    renderer.shadowMap.needsUpdate = true;
+    invalidate();
 
     topHeight = personById(s.mode === 'bodies' ? 'musk' : s.personId).heightM;
     top.scale.setScalar(topHeight / 1.88);
@@ -261,6 +275,7 @@ export function createWealthScene(host: HTMLElement): WealthScene {
     composer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    invalidate();
   }
   const ro = new ResizeObserver(resize);
   ro.observe(host);
@@ -269,7 +284,10 @@ export function createWealthScene(host: HTMLElement): WealthScene {
   let statsCb: ((s: Stats) => void) | null = null;
   let anchorCb: ((a: { top: ScreenAnchor; base: ScreenAnchor }) => void) | null = null;
   let frames = 0;
+  let movingMs = 0;
+  let lastFrame = 0;
   let lastStat = performance.now();
+  let lastFps = 0;
   let raf = 0;
   const v = new Vector3();
 
@@ -282,6 +300,8 @@ export function createWealthScene(host: HTMLElement): WealthScene {
     };
   }
 
+  const SETTLE_MS = 160;
+
   function frame(now: number) {
     raf = requestAnimationFrame(frame);
     if (ease) {
@@ -290,35 +310,70 @@ export function createWealthScene(host: HTMLElement): WealthScene {
       controls.target.lerpVectors(ease.fromT, ease.toT, e);
       camera.position.lerpVectors(ease.fromP, ease.toP, e);
       if (k === 1) ease = null;
+      invalidate();
     }
-    controls.update();
-    if (aoOn) composer.render();
-    else renderer.render(scene, camera);
+    controls.update(); // fires 'change' while dragging or damping
 
-    anchorCb?.({
-      top: project(new Vector3(0, top.position.y + topHeight + 0.35, 0)),
-      base: project(new Vector3(base.position.x, SCALE_PERSON_M + 0.35, base.position.z)),
-    });
+    if (dirty) {
+      renderer.render(scene, camera);
+      dirty = false;
+      // Count only back-to-back frames, so the rate reflects motion, not idle time.
+      if (now - lastFrame < 100) {
+        frames++;
+        movingMs += now - lastFrame;
+      }
+      lastFrame = now;
+      anchorCb?.({
+        top: project(new Vector3(0, top.position.y + topHeight + 0.35, 0)),
+        base: project(new Vector3(base.position.x, SCALE_PERSON_M + 0.35, base.position.z)),
+      });
+    } else if (!settled && now - lastMove > SETTLE_MS) {
+      if (aoOn) composer.render();
+      settled = true;
+    }
 
-    frames++;
     if (now - lastStat > 500) {
-      const fps = (frames * 1000) / (now - lastStat);
-      slowStats = aoOn && fps < 45 && !ease && now > graceUntil ? slowStats + 1 : 0;
-      if (slowStats >= 4) aoOn = false;
+      if (frames >= 5) lastFps = Math.round((frames * 1000) / movingMs);
       statsCb?.({
-        fps: Math.round(fps),
-        ao: aoOn,
+        fps: lastFps,
+        moving: frames > 0,
         instances: heap?.instances ?? 0,
         heap: { radius: cone.radius, height: cone.height },
       });
       frames = 0;
+      movingMs = 0;
       lastStat = now;
     }
   }
   raf = requestAnimationFrame(frame);
 
+  function bench(n: number) {
+    const gl = renderer.getContext();
+    const px = new Uint8Array(4);
+    const saved = camera.position.clone();
+    const time = (draw: () => void) => {
+      const ms: number[] = [];
+      for (let i = 0; i < n; i++) {
+        camera.position.sub(controls.target).applyAxisAngle(new Vector3(0, 1, 0), 0.05).add(controls.target);
+        camera.lookAt(controls.target);
+        const t0 = performance.now();
+        draw();
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // wait for the GPU
+        ms.push(performance.now() - t0);
+      }
+      ms.sort((a, b) => a - b);
+      return Math.round(ms[ms.length >> 1] * 10) / 10;
+    };
+    const moving = time(() => renderer.render(scene, camera));
+    const settled = time(() => composer.render());
+    camera.position.copy(saved);
+    invalidate();
+    return { moving, settled };
+  }
+
   return {
     update,
+    bench,
     onStats: (cb) => (statsCb = cb),
     onAnchors: (cb) => (anchorCb = cb),
     dispose() {

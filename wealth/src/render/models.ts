@@ -139,7 +139,7 @@ function paint(g: BufferGeometry, hex: string): BufferGeometry {
 /** Capsule from a joint along a direction; returns the far end. */
 export type Detail = 'hi' | 'lo';
 // Segment counts per detail level: capsule cap / radial, sphere width / height.
-const SEG = { hi: { cap: 3, rad: 8, sw: 12, sh: 9 }, lo: { cap: 1, rad: 5, sw: 6, sh: 4 } };
+const SEG = { hi: { cap: 2, rad: 7, sw: 10, sh: 8 }, lo: { cap: 1, rad: 4, sw: 5, sh: 4 } };
 let seg = SEG.hi;
 
 function limb(parts: BufferGeometry[], from: Vector3, dir: V3, len: number, r: number, hex: string): Vector3 {
@@ -164,7 +164,7 @@ export function mannequin(pose: Pose, o: Outfit = PLAIN, detail: Detail = 'hi'):
   seg = SEG[detail];
   const parts: BufferGeometry[] = [];
   blob(parts, [0, 1.62, 0.01], 0.105, [0.92, 1.08, 1], o.skin);
-  blob(parts, [0, 1.49, 0], 0.05, [1, 1, 1], o.skin, 0.06);
+  if (detail === 'hi') blob(parts, [0, 1.49, 0], 0.05, [1, 1, 1], o.skin, 0.06);
   blob(parts, [0, 1.2, 0], 0.16, [1.12, 1, 0.66], o.top, 0.3);
   blob(parts, [0, 0.93, 0], 0.15, [1.1, 1, 0.7], o.bottom, 0.06);
   for (const side of [0, 1] as const) {
@@ -174,7 +174,7 @@ export function mannequin(pose: Pose, o: Outfit = PLAIN, detail: Detail = 'hi'):
     if (detail === 'hi') blob(parts, [wrist.x, wrist.y, wrist.z], 0.045, [1, 1.2, 0.7], o.skin);
     const knee = limb(parts, new Vector3(0.09 * sx, 0.9, 0), pose.thigh[side], 0.44, 0.075, o.bottom);
     const ankle = limb(parts, knee, pose.shin[side], 0.42, 0.056, o.bottom);
-    blob(parts, [ankle.x, ankle.y - 0.02, ankle.z + 0.06], 0.05, [1, 0.7, 2], o.shoes);
+    if (detail === 'hi') blob(parts, [ankle.x, ankle.y - 0.02, ankle.z + 0.06], 0.05, [1, 0.7, 2], o.shoes);
   }
   return mergeGeometries(parts)!;
 }
@@ -253,6 +253,17 @@ export function shrouds(detail: Detail): BufferGeometry[] {
     smooth.computeVertexNormals();
     return layDown(smooth, v % 2 === 0 ? 'back' : 'side');
   });
+}
+
+/** Far from the peak a body is a few pixels tall: one soft lying form and a head, about 80 triangles. */
+export function farBody(): BufferGeometry {
+  const body = new CapsuleGeometry(0.15, 1.15, 1, 5).toNonIndexed();
+  body.scale(1, 1, 0.6);
+  body.translate(0, 0.78, 0);
+  const head = new SphereGeometry(0.1, 5, 4).toNonIndexed();
+  head.translate(0, 1.6, 0.01);
+  const g = mergeGeometries([paint(body, '#ffffff'), paint(head, '#ffffff')])!;
+  return layDown(g, 'back');
 }
 
 export function figureMaterial(): MeshStandardMaterial {

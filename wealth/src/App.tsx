@@ -65,7 +65,7 @@ export function App() {
       place(baseTagRef.current, a.base);
     });
     sceneRef.current = scene;
-    (window as unknown as { __wealth?: { stats: () => Stats | null } }).__wealth = { stats: () => latestStats.current };
+    (window as unknown as { __wealth?: object }).__wealth = { stats: () => latestStats.current, bench: (n = 30) => scene.bench(n) };
     return () => {
       scene.dispose();
       sceneRef.current = null;
@@ -207,7 +207,7 @@ export function App() {
         </details>
 
         <p className="debug" data-testid="stats">
-          {stats ? `${stats.fps} fps · ${people(stats.instances)} pieces drawn${stats.ao ? '' : ' · ambient occlusion off for speed'}` :' '}
+          {stats ? `${people(stats.instances)} pieces drawn · ${stats.fps ? `${stats.fps} fps while moving` : 'redraws only when the camera moves'}` :' '}
         </p>
       </aside>
 
