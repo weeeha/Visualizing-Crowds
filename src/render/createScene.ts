@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import { SKY } from '../crowd/palettes';
 import { fillRadius, spacingFor, type FillResult } from '../layout/fillRadius';
+import { occupiedCentroid } from '../layout/occupancy';
 import type { SceneState } from '../state';
+import { createAtlas } from './atlas';
 import { CameraRig } from './camera';
 import { BudgetGovernor, lodRanges, MID_BUDGET } from './lod';
+import { NearTier } from './nearTier';
 import { countProfile, placeContext } from './placeCache';
 import type { CrowdScene, FrameContext, Layer, PlaceContext, SceneStats } from './types';
 import { supportsWebGL2 } from './webgl';
@@ -30,8 +33,7 @@ export function createScene(container: HTMLElement): CrowdScene | null {
   const rig = new CameraRig(renderer.domElement);
   scene.add(createGround());
 
-  // Crowd tiers are added in later tasks: near sprites, mid dots, far ground shader.
-  const layers: Layer[] = [];
+  const layers: Layer[] = [new NearTier(createAtlas())];
   for (const l of layers) scene.add(l.object);
 
   let current: SceneState | null = null;
@@ -59,7 +61,10 @@ export function createScene(container: HTMLElement): CrowdScene | null {
     fill = fillRadius(countProfile(next.placeId, next.density), next.count);
     for (const l of layers) l.setCrowd({ radius: fill.radius, spacing: spacingFor(next.density), highlight: next.highlight });
     if (placeChanged || prev!.camera.nonce !== next.camera.nonce) {
-      rig.flyTo(next.camera.preset, fill.radius, performance.now());
+      // Aim at where people stand, which is not the focus when the focus lies outside the place.
+      const center = occupiedCentroid(ctx!.raster, fill.radius);
+      const extent = Math.max(15, fill.radius - Math.hypot(center[0], center[1]));
+      rig.flyTo(next.camera.preset, center, extent, performance.now());
     }
   }
 

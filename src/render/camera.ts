@@ -36,13 +36,14 @@ export class CameraRig {
     this.controls.maxDistance = Math.max(200, (2.5 * halfDiag) / TAN_HALF);
   }
 
-  flyTo(preset: 'aerial' | 'eye', crowdRadius: number, nowMs: number): void {
-    const target = new THREE.Vector3(0, 0, 0);
+  /** Ease to a preset view of the crowd. `center` is where people actually stand; `extent` its rough radius. */
+  flyTo(preset: 'aerial' | 'eye', center: [number, number], extent: number, nowMs: number): void {
+    const target = new THREE.Vector3(center[0], 0, center[1]);
     const az = this.controls.getAzimuthalAngle();
     const polar = preset === 'aerial' ? THREE.MathUtils.degToRad(45) : MAX_POLAR;
     const dist =
       preset === 'aerial'
-        ? THREE.MathUtils.clamp((1.4 * Math.max(crowdRadius, 15)) / TAN_HALF, 30, this.controls.maxDistance)
+        ? THREE.MathUtils.clamp((1.4 * Math.max(extent, 15)) / TAN_HALF, 30, this.controls.maxDistance)
         : 30;
     const toPos = new THREE.Vector3().setFromSphericalCoords(dist, polar, az).add(target);
     this.flight = { t0: nowMs, dur: 1200, fromPos: this.camera.position.clone(), toPos, fromTarget: this.controls.target.clone(), toTarget: target };
