@@ -7,6 +7,7 @@ import {
   CanvasTexture,
   CapsuleGeometry,
   Color,
+  CylinderGeometry,
   MeshStandardMaterial,
   Quaternion,
   RepeatWrapping,
@@ -275,6 +276,93 @@ export const SCALE_OUTFIT: Outfit = { skin: '#b98d6e', top: '#4f6d8f', bottom: '
 
 export function standingFigure(outfit: Outfit, heightM: number): BufferGeometry {
   const g = mannequin(STANDING, outfit);
+  g.scale(heightM / 1.75, heightM / 1.75, heightM / 1.75);
+  return g;
+}
+
+// ---------- the person on top ----------
+
+/** Smooth body section: elliptical rings along y. Each profile row is [y, half-width, half-depth]. */
+function loft(profile: [number, number, number][], hex: string, around = 20): BufferGeometry {
+  const pos: number[] = [];
+  const ring = ([y, w, d]: [number, number, number]) =>
+    Array.from({ length: around }, (_, k) => {
+      const a = (k / around) * Math.PI * 2;
+      return [Math.cos(a) * w, y, Math.sin(a) * d] as const;
+    });
+  for (let j = 1; j < profile.length; j++) {
+    const lo = ring(profile[j - 1]);
+    const hi = ring(profile[j]);
+    for (let k = 0; k < around; k++) {
+      const k2 = (k + 1) % around;
+      pos.push(...lo[k], ...hi[k2], ...hi[k], ...lo[k], ...lo[k2], ...hi[k2]);
+    }
+  }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  const smooth = mergeVertices(g);
+  smooth.computeVertexNormals();
+  return paint(smooth.toNonIndexed(), hex);
+}
+
+export type TopVariant = 'plain' | 'raised' | 'hips';
+
+const TOP_POSES: Record<TopVariant, Pick<Pose, 'upperArm' | 'foreArm' | 'thigh' | 'shin'>> = {
+  plain: { upperArm: [[0.12, -1, 0], [-0.12, -1, 0]], foreArm: [[0.06, -1, 0.15], [-0.06, -1, 0.15]], thigh: [[0.06, -1, 0], [-0.06, -1, 0]], shin: [[0.03, -1, 0], [-0.03, -1, 0]] },
+  raised: { upperArm: [[0.55, 1, 0.1], [-0.55, 1, 0.1]], foreArm: [[0.25, 1, 0], [-0.25, 1, 0]], thigh: [[0.12, -1, 0], [-0.12, -1, 0]], shin: [[0.05, -1, 0], [-0.05, -1, 0]] },
+  hips: { upperArm: [[0.6, -0.8, -0.12], [-0.6, -0.8, -0.12]], foreArm: [[-0.78, -0.57, 0.25], [0.78, -0.57, 0.25]], thigh: [[0.1, -1, 0], [-0.1, -1, 0]], shin: [[0.04, -1, 0], [-0.04, -1, 0]] },
+};
+
+const TOP = { skin: '#c9a58a', tee: '#232220', jeans: '#2f3a4f', boots: '#1a1918', hair: '#4a3a2c', cap: '#1d1c1b' };
+
+/**
+ * The person on top: a broad build in a black t-shirt, dark jeans and boots, with hair, ears and a
+ * nose but no facial features, so it reads as a person and never as a likeness. 1.75 m, feet at 0.
+ */
+export function topFigure(variant: TopVariant, heightM: number): BufferGeometry {
+  seg = SEG.hi;
+  const pose = TOP_POSES[variant];
+  const parts: BufferGeometry[] = [];
+  // Jeans at the hips, t-shirt above; a little fuller through the middle.
+  parts.push(loft([[0.82, 0.13, 0.09], [0.9, 0.16, 0.105], [1.0, 0.158, 0.11]], TOP.jeans));
+  parts.push(loft([[0.98, 0.16, 0.115], [1.08, 0.158, 0.122], [1.18, 0.165, 0.12], [1.28, 0.183, 0.12], [1.36, 0.198, 0.118], [1.42, 0.19, 0.105], [1.46, 0.12, 0.08], [1.48, 0.06, 0.05]], TOP.tee));
+  limb(parts, new Vector3(0, 1.45, 0), [0, 1, 0.08], 0.12, 0.055, TOP.skin);
+  // Head, ears, nose
+  blob(parts, [0, 1.64, 0.005], 0.105, [0.86, 1.05, 0.95], TOP.skin);
+  blob(parts, [0.088, 1.635, -0.005], 0.022, [0.45, 1, 0.75], TOP.skin);
+  blob(parts, [-0.088, 1.635, -0.005], 0.022, [0.45, 1, 0.75], TOP.skin);
+  limb(parts, new Vector3(0, 1.645, 0.088), [0, -0.6, 1], 0.035, 0.013, TOP.skin);
+  if (variant === 'raised') {
+    const crown = new SphereGeometry(0.113, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.47).toNonIndexed();
+    crown.scale(0.88, 0.95, 0.98);
+    crown.translate(0, 1.655, 0);
+    parts.push(paint(crown, TOP.cap));
+    const brim = new CylinderGeometry(0.075, 0.075, 0.008, 16).toNonIndexed();
+    brim.scale(1.1, 1, 0.85);
+    brim.rotateX(0.12);
+    brim.translate(0, 1.685, 0.115);
+    parts.push(paint(brim, TOP.cap));
+  } else {
+    const hair = new SphereGeometry(0.109, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.42).toNonIndexed();
+    hair.scale(0.88, 1.05, 0.97);
+    hair.rotateX(-0.28);
+    hair.translate(0, 1.645, -0.005);
+    parts.push(paint(hair, TOP.hair));
+  }
+  for (const side of [0, 1] as const) {
+    const sx = side === 0 ? 1 : -1;
+    const shoulder = new Vector3(0.18 * sx, 1.385, 0);
+    // One skin capsule for the whole upper arm, with the sleeve over its top half, so there is no gap.
+    const elbow = limb(parts, shoulder, pose.upperArm[side], 0.3, 0.045, TOP.skin);
+    limb(parts, shoulder.clone().addScaledVector(new Vector3(...pose.upperArm[side]).normalize(), -0.02), pose.upperArm[side], 0.17, 0.058, TOP.tee);
+    const wrist = limb(parts, elbow.clone().addScaledVector(new Vector3(...pose.foreArm[side]).normalize(), -0.03), pose.foreArm[side], 0.29, 0.041, TOP.skin);
+    blob(parts, [wrist.x, wrist.y, wrist.z], 0.045, [0.8, 1.25, 0.6], TOP.skin);
+    const knee = limb(parts, new Vector3(0.095 * sx, 0.88, 0), pose.thigh[side], 0.45, 0.082, TOP.jeans);
+    const ankle = limb(parts, knee, pose.shin[side], 0.42, 0.064, TOP.jeans);
+    blob(parts, [ankle.x, ankle.y - 0.025, ankle.z + 0.055], 0.055, [1, 0.75, 2], TOP.boots);
+  }
+  parts.forEach((p) => p.deleteAttribute('uv'));
+  const g = mergeGeometries(parts)!;
   g.scale(heightM / 1.75, heightM / 1.75, heightM / 1.75);
   return g;
 }
