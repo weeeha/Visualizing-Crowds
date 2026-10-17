@@ -25,7 +25,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { estimateById, personById, type EstimateId, type PersonId } from '../data/figures';
 import { bodyCone, cashCone, type Cone } from '../pile/volume';
 import { bodyHeap, cashHeap, type BodyStyle, type Heap } from './heaps';
-import { figureMaterial, MUSK_OUTFIT, SCALE_OUTFIT, standingFigure } from './models';
+import { figureMaterial, SCALE_OUTFIT, standingFigure, topFigure, type TopVariant } from './models';
 
 export type Mode = 'cash' | 'bodies';
 export type CameraPreset = 'close' | 'whole';
@@ -119,7 +119,9 @@ export function createWealthScene(host: HTMLElement): WealthScene {
   scene.add(ground);
 
   const figMat = figureMaterial();
-  const top = new Mesh(standingFigure(MUSK_OUTFIT, 1.88), figMat);
+  // Review hook: ?top=plain|raised|hips picks the figure variant until one is chosen as the default.
+  const topVariant = (new URLSearchParams(location.search).get('top') ?? 'plain') as TopVariant;
+  const top = new Mesh(topFigure(['plain', 'raised', 'hips'].includes(topVariant) ? topVariant : 'plain', 1.88), figMat);
   top.castShadow = true;
   const base = new Mesh(standingFigure(SCALE_OUTFIT, SCALE_PERSON_M), figMat);
   base.castShadow = true;
