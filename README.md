@@ -52,7 +52,7 @@ A separate app in the same repo, sharing the stack and visual tone. A labeled fi
 
 ![Bodies pile: 500,000 estimated deaths (CGD low end) shown as a 28.6 m heap of skeleton figures, whole-pile view](docs/screenshots/wealth-bodies.webp)
 
-This app is not deployed. Run it locally with the commands below.
+Run it locally with the commands below.
 
 ## Tech stack
 
@@ -60,7 +60,7 @@ This app is not deployed. Run it locally with the commands below.
 - Three.js 0.170, plain and imperative, for the scene
 - React 18 for the sidebar only
 - Vitest for unit tests, Playwright for end-to-end tests in Chromium and WebKit
-- Vercel for the crowd visualizer deployment
+- Vercel for deployment
 
 ## Getting started
 
