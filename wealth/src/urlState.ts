@@ -5,7 +5,7 @@ export const DEFAULT_STATE: WealthState = {
   mode: 'cash',
   personId: 'musk',
   estimateId: 'cgd-low',
-  bodyStyle: 'mannequin',
+  bodyStyle: 'skeleton',
   camera: 'close',
 };
 
@@ -18,7 +18,7 @@ export function readHash(hash: string): WealthState {
     mode: oneOf(p.get('pile'), ['cash', 'bodies'] as const, DEFAULT_STATE.mode),
     personId: oneOf<PersonId>(p.get('person'), PEOPLE.map((x) => x.id), DEFAULT_STATE.personId),
     estimateId: oneOf<EstimateId>(p.get('estimate'), ESTIMATES.map((x) => x.id), DEFAULT_STATE.estimateId),
-    bodyStyle: oneOf(p.get('figures'), ['mannequin', 'shroud'] as const, DEFAULT_STATE.bodyStyle),
+    bodyStyle: oneOf(p.get('figures'), ['skeleton', 'mannequin', 'shroud'] as const, DEFAULT_STATE.bodyStyle),
     camera: oneOf(p.get('view'), ['close', 'whole'] as const, DEFAULT_STATE.camera),
   };
   return normalize(s);

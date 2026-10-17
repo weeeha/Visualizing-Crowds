@@ -151,6 +151,7 @@ export function App() {
           value={state.bodyStyle}
           disabled={!isBodies}
           options={[
+            { id: 'skeleton', label: 'Skeletons' },
             { id: 'mannequin', label: 'Mannequins' },
             { id: 'shroud', label: 'Shrouded' },
           ]}
