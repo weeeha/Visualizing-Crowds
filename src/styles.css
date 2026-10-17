@@ -1,0 +1,50 @@
+:root {
+  --paper: #f4f2ee;
+  --ground: #e3dfd7;
+  --ink: #2b2925;
+  --muted: #69645b; /* ≥4.5:1 on --paper */
+  --line: #e0dbd2;
+  --chip-border: #cfc9be;
+  --surface: #fbfaf7;
+  --warn-bg: #f3e3dc;
+  --warn-ink: #7a2e22;
+  --r-sm: 6px;
+  --r-pill: 999px;
+  --fs-display: 34px;
+  --fs-body: 13px;
+  --fs-small: 12px;
+  --fs-micro: 10px;
+  --sidebar-w: 280px;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--ink);
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--paper); }
+.app { display: flex; height: 100%; }
+.sidebar {
+  width: var(--sidebar-w);
+  flex: none;
+  padding: 20px 18px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  background: var(--paper);
+}
+.scene { flex: 1; min-width: 0; min-height: 0; position: relative; background: var(--ground); }
+.scene canvas { display: block; width: 100%; height: 100%; }
+.title { font-size: var(--fs-body); font-weight: 600; margin: 0 0 16px; letter-spacing: 0.01em; }
+@media (max-width: 720px) {
+  .app { flex-direction: column-reverse; }
+  .sidebar { width: auto; height: 45%; border-right: 0; border-top: 1px solid var(--line); }
+}
+.scene-msg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 24px;
+  color: var(--muted);
+  font-size: var(--fs-body);
+  text-align: center;
+}
