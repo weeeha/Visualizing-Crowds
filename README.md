@@ -1,5 +1,11 @@
 # Visualizing Crowds
 
+**Problem.** Large crowd numbers are hard to picture, and a figure like 180,000 means little until it is set inside a place you know.
+
+**Idea.** Everything derives from one number, the crowd's fill radius from a focus point inside a real place's outline. Three levels of detail read that same radius, so the crowd edge lines up from 50 people to 50 million.
+
+**Built.** A browser tool in Three.js, TypeScript and Vite with a React sidebar: a log slider for the count, five places traced from OpenStreetMap, three densities and shareable URLs. Live at https://visualizing-crowds.vercel.app. 35 commits on 4 days, Oct 11 to Oct 20, 2026.
+
 A browser tool that shows what a number of people looks like, from 50 to 50 million, standing in a real place. Drag the count, pick a place and a density, and the crowd fills the place outward from a focus point.
 
 ![Eye-level view of 20,000 people packed into Times Square, with the sidebar controls on the left](docs/screenshots/times-square-eye.webp)
