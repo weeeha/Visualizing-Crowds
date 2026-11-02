@@ -6,6 +6,8 @@
 
 **Built.** A browser tool in Three.js, TypeScript and Vite with a React sidebar: a log slider for the count, five places traced from OpenStreetMap, three densities and shareable URLs. Live at https://visualizing-crowds.vercel.app. 35 commits on 4 days, Oct 11 to Oct 20, 2026.
 
+**Decision.** The Compare lines use only figures confirmed on a source page, so Royal Albert Hall, The O2 and Wembley were left out when their official sites did not state a capacity.
+
 A browser tool that shows what a number of people looks like, from 50 to 50 million, standing in a real place. Drag the count, pick a place and a density, and the crowd fills the place outward from a focus point.
 
 ![Eye-level view of 20,000 people packed into Times Square, with the sidebar controls on the left](docs/screenshots/times-square-eye.webp)
