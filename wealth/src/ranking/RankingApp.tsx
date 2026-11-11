@@ -13,7 +13,7 @@ function readHash(h: string): RankingState {
   return {
     selected: LEADERS.some((l) => l.id === sel) ? sel! : DEFAULT.selected,
     estimate: p.get('estimate') === 'high' ? 'high' : 'low',
-    camera: p.get('view') === 'close' ? 'close' : p.get('view') === 'row' ? 'row' : DEFAULT.camera,
+    camera: (['close', 'heap', 'row'] as RankCamera[]).find((c) => c === p.get('view')) ?? DEFAULT.camera,
   };
 }
 const writeHash = (s: RankingState) => `#${new URLSearchParams({ leader: s.selected, estimate: s.estimate, view: s.camera })}`;
@@ -57,6 +57,7 @@ export function RankingApp() {
       place(baseRef.current, base);
     });
     sceneRef.current = scene;
+    (window as unknown as { __ranking?: object }).__ranking = { bench: (n = 20) => scene.bench(n) };
     return () => {
       scene.dispose();
       sceneRef.current = null;
@@ -109,7 +110,7 @@ export function RankingApp() {
         <div className="section" role="group" aria-label="Camera">
           <p className="label">Camera</p>
           <div className="chips">
-            {([['row', 'The whole row'], ['close', 'Close on the top']] as [RankCamera, string][]).map(([c, label]) => (
+            {([['row', 'The whole row'], ['heap', 'One heap'], ['close', 'Close on the top']] as [RankCamera, string][]).map(([c, label]) => (
               <button key={c} type="button" className={`chip${state.camera === c ? ' on' : ''}`} aria-pressed={state.camera === c} onClick={() => set({ camera: c })}>
                 {label}
               </button>
@@ -150,10 +151,14 @@ export function RankingApp() {
             and the World War II tolls for Hitler and Hirohito come from the same war.
           </p>
           <p>
-            The selected heap shows skeletons for the top {45} m of slope. Every other heap, and the lower slope, is a textured
-            surface of the same size. Where a source gives only an upper bound, the heap uses that bound in both views.
+            The selected heap is covered in skeletons from its peak to the ground, with the most detail near the top. The
+            other heaps carry skeletons at the peak and round the foot; the slope between is a textured surface of the same
+            size. Where a source gives only an upper bound, the heap uses that bound in both views.
           </p>
-          <p>The figures on top are generic and are not likenesses.</p>
+          <p>
+            Each figure on top is 1.75 m tall and dressed in the leader's period clothing. Faces are left blank, so these are
+            figures in costume and not likenesses.
+          </p>
         </details>
       </aside>
 

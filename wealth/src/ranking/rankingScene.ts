@@ -1,5 +1,5 @@
 // Three.js for the ranking page: one to-scale heap per leader, side by side, each leader standing on top.
-// Every heap is a textured cone; the selected one also gets real skeletons near its peak.
+// Every heap carries real skeletons at its peak and foot; the selected one is covered from top to bottom.
 import {
   BackSide,
   CanvasTexture,
@@ -30,12 +30,14 @@ import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { bodyCone, type Cone } from '../pile/volume';
 import { hash01 } from '../pile/shell';
-import { bodyHeap, type Heap } from '../render/heaps';
-import { figureMaterial, SCALE_OUTFIT, standingFigure, type Outfit } from '../render/models';
+import type { Heap } from '../render/heaps';
+import { figureMaterial, SCALE_OUTFIT, standingFigure } from '../render/models';
+import { boneHeap } from './boneHeap';
+import { leaderFigure } from './figures';
 import { heapDeaths, LEADERS, type Estimate } from './data';
 import { lineUp, rowLength, type Placed } from './layout';
 
-export type RankCamera = 'close' | 'row';
+export type RankCamera = 'close' | 'heap' | 'row';
 
 export interface RankingState {
   selected: string;
@@ -53,6 +55,8 @@ export interface Anchor {
 export interface RankingScene {
   update(s: RankingState): void;
   onAnchors(cb: (a: Anchor[], base: Anchor) => void): void;
+  /** Debug: render n orbiting frames synchronously; median ms per frame and pieces drawn. */
+  bench(n: number): { ms: number; pieces: number; triangles: number };
   dispose(): void;
 }
 
@@ -60,42 +64,65 @@ const PAPER = '#f4f2ee';
 const GROUND = '#e3dfd7';
 const GAP_M = 30;
 const UNRANKED_EXTRA_M = 120;
-const TILE_M = 4; // one texture tile covers 4 × 4 m of slope
-const DETAIL_SLANT_M = 45;
+const TILE_M = 16; // one texture tile covers 16 × 16 m of slope
 const PERSON_M = 1.75;
 const EASE_MS = 700;
-const LEADER_OUTFIT: Outfit = { skin: '#b9a58f', top: '#2c2a27', bottom: '#2c2a27', shoes: '#1b1a18' };
 
-/** A tile of loose bones on a dark ground, for heaps seen from a distance. */
+/**
+ * A tile of whole skeletons lying two deep on a dark ground, at the same size and density as the modelled
+ * ones, so a slope reads the same where it is drawn and where it is only textured.
+ */
 function boneTexture(): CanvasTexture {
-  const n = 512;
+  const n = 2048;
+  const px = n / TILE_M; // pixels per metre
   const c = document.createElement('canvas');
   c.width = c.height = n;
   const g = c.getContext('2d')!;
-  g.fillStyle = '#2f2b26';
+  g.fillStyle = '#28241f';
   g.fillRect(0, 0, n, n);
-  const bones = ['#e6dcc4', '#d9cdb1', '#ece4d0', '#cfc1a2', '#bfb193'];
-  for (let i = 0; i < 1400; i++) {
-    const r = (k: number) => hash01(i, k, 3, 77);
-    const x = r(0) * n, y = r(1) * n, a = r(2) * Math.PI;
-    g.fillStyle = bones[Math.floor(r(3) * bones.length)];
-    g.save();
-    // Draw each piece at its wrapped neighbours too, so the tile repeats without seams.
-    for (const dx of [-n, 0, n]) for (const dy of [-n, 0, n]) {
-      g.setTransform(Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), x + dx, y + dy);
-      if (r(4) < 0.12) {
-        g.beginPath(); g.arc(0, 0, 9, 0, Math.PI * 2); g.fill(); // skull
-        g.fillStyle = '#2f2b26';
-        g.beginPath(); g.arc(-3.5, 0, 2.2, 0, Math.PI * 2); g.arc(3.5, 0, 2.2, 0, Math.PI * 2); g.fill();
-        g.fillStyle = bones[0];
-      } else {
-        const len = 10 + r(5) * 26;
-        g.beginPath(); g.roundRect(-len / 2, -2.2, len, 4.4, 2.2); g.fill(); // long bone
-        g.beginPath(); g.arc(-len / 2, 0, 3.4, 0, Math.PI * 2); g.arc(len / 2, 0, 3.4, 0, Math.PI * 2); g.fill();
+  g.lineCap = 'round';
+  const line = (x1: number, y1: number, x2: number, y2: number, w: number) => {
+    g.lineWidth = w * px;
+    g.beginPath();
+    g.moveTo(x1 * px, y1 * px);
+    g.lineTo(x2 * px, y2 * px);
+    g.stroke();
+  };
+  const glyph = (r: (k: number) => number) => {
+    // Head at -0.8 m, feet at +0.85 m, along y.
+    g.beginPath();
+    g.arc(0, -0.78 * px, 0.1 * px, 0, Math.PI * 2);
+    g.fill();
+    line(0, -0.66, 0, -0.08, 0.035);
+    for (let i = 0; i < 5; i++) line(-0.13, -0.58 + i * 0.07, 0.13, -0.58 + i * 0.07, 0.022);
+    line(-0.12, -0.05, 0.12, -0.05, 0.07);
+    for (const sx of [1, -1]) {
+      const ax = sx * (0.25 + r(6 + sx) * 0.35);
+      line(sx * 0.17, -0.62, ax, -0.33, 0.028);
+      line(ax, -0.33, ax + (r(8 + sx) - 0.5) * 0.4, -0.08, 0.024);
+      const kx = sx * (0.1 + r(10 + sx) * 0.2);
+      line(sx * 0.08, 0, kx, 0.43, 0.036);
+      line(kx, 0.43, kx + (r(12 + sx) - 0.5) * 0.3, 0.84, 0.03);
+    }
+  };
+  const perLayer = Math.round((TILE_M * TILE_M) / (0.68 * 0.68) / 2);
+  const layers: [string[], number][] = [
+    [['#7d735f', '#6f6654', '#877c66'], 5],
+    [['#e6dcc4', '#d9cdb1', '#ece4d0', '#cfc1a2', '#c4b594'], 6],
+  ];
+  for (const [palette, salt] of layers) {
+    for (let i = 0; i < perLayer; i++) {
+      const r = (k: number) => hash01(i, k, salt, 77);
+      const x = r(0) * n, y = r(1) * n, a = r(2) * Math.PI * 2, sc = r(3) < 0.2 ? 0.7 : 0.95 + r(4) * 0.12;
+      g.fillStyle = g.strokeStyle = palette[Math.floor(r(5) * palette.length)];
+      // Draw each at its wrapped neighbours too, so the tile repeats without seams.
+      for (const dx of [-n, 0, n]) for (const dy of [-n, 0, n]) {
+        g.setTransform(Math.cos(a) * sc, Math.sin(a) * sc, -Math.sin(a) * sc, Math.cos(a) * sc, x + dx, y + dy);
+        glyph(r);
       }
     }
-    g.restore();
   }
+  g.setTransform(1, 0, 0, 1, 0, 0);
   const t = new CanvasTexture(c);
   t.wrapS = t.wrapT = RepeatWrapping;
   t.colorSpace = SRGBColorSpace;
@@ -142,7 +169,6 @@ export function createRankingScene(host: HTMLElement): RankingScene {
   const tex = boneTexture();
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const figMat = figureMaterial();
-  const leaderGeo = standingFigure(LEADER_OUTFIT, PERSON_M);
   const scalePerson = new Mesh(standingFigure(SCALE_OUTFIT, PERSON_M), figMat);
   scalePerson.castShadow = true;
   scene.add(scalePerson);
@@ -174,46 +200,58 @@ export function createRankingScene(host: HTMLElement): RankingScene {
     return new MeshStandardMaterial({ map: t, roughness: 1 });
   }
 
-  // ---- built per estimate: the row of plain heaps, ranges and figures ----
+  // ---- built per estimate: one heap and one figure per leader ----
   let row = new Group();
   scene.add(row);
   let placed: Placed[] = [];
   let cones = new Map<string, Cone>();
-  let plain = new Map<string, Mesh>();
+  let heaps = new Map<string, Heap>();
   let tops = new Map<string, Mesh>();
   let rowKey = '';
+  let detailed = '';
 
-  function disposeGroup(g: Group) {
-    g.traverse((o) => {
-      const m = o as Mesh;
-      if (!m.isMesh) return;
-      if (m.geometry !== leaderGeo) m.geometry.dispose();
-      const mat = m.material as MeshStandardMaterial;
-      if (mat !== figMat) {
-        mat.map?.dispose();
-        mat.dispose();
-      }
+  function disposeRow() {
+    heaps.forEach((h) => {
+      row.remove(h.group);
+      h.dispose();
     });
+    row.traverse((o) => {
+      const m = o as Mesh;
+      if (!m.isMesh || m.material === figMat) return;
+      m.geometry.dispose();
+      (m.material as MeshBasicMaterial).dispose();
+    });
+    tops.forEach((t) => t.geometry.dispose());
+  }
+
+  function setHeap(id: string, selected: boolean) {
+    const old = heaps.get(id);
+    if (old) {
+      row.remove(old.group);
+      old.dispose();
+    }
+    const c = cones.get(id)!;
+    const h = boneHeap(c, { selected, core: coreMaterial(c) });
+    h.group.position.x = placed.find((p) => p.id === id)!.x;
+    row.add(h.group);
+    heaps.set(id, h);
   }
 
   function buildRow(est: Estimate) {
     if (est === rowKey) return false;
     rowKey = est;
+    detailed = '';
     scene.remove(row);
-    disposeGroup(row);
+    disposeRow();
     row = new Group();
+    heaps = new Map();
     cones = new Map(LEADERS.map((l) => [l.id, bodyCone(heapDeaths(l, est))]));
     placed = lineUp(LEADERS.map((l) => ({ id: l.id, radius: cones.get(l.id)!.radius })), GAP_M, new Set(['genghis']), UNRANKED_EXTRA_M);
-    plain = new Map();
     tops = new Map();
     for (const p of placed) {
       const l = LEADERS.find((x) => x.id === p.id)!;
       const c = cones.get(p.id)!;
-      const m = new Mesh(new ConeGeometry(c.radius, c.height, 128, 1, true), coreMaterial(c));
-      m.position.set(p.x, c.height / 2, 0);
-      m.castShadow = m.receiveShadow = true;
-      row.add(m);
-      plain.set(p.id, m);
+      setHeap(p.id, false);
 
       // In the low view, a faint shell shows how big the heap gets at the high estimate.
       if (est === 'low' && l.low !== null && l.high > l.low) {
@@ -226,8 +264,8 @@ export function createRankingScene(host: HTMLElement): RankingScene {
         row.add(ghost);
       }
 
-      const top = new Mesh(leaderGeo, figMat);
-      top.position.set(p.x, c.height - 0.12, 0);
+      const top = new Mesh(leaderFigure(p.id), figMat);
+      top.position.set(p.x, c.height - 0.1, 0);
       top.rotation.y = 0.5;
       top.castShadow = true;
       row.add(top);
@@ -249,25 +287,15 @@ export function createRankingScene(host: HTMLElement): RankingScene {
     return true;
   }
 
-  // ---- the selected heap's detailed skeletons ----
-  let detail: Heap | null = null;
-  let detailKey = '';
-
+  // ---- the selected heap is covered in skeletons from peak to ground ----
   function buildDetail(s: RankingState) {
-    const key = `${s.estimate}|${s.selected}`;
-    if (key === detailKey) return false;
-    detailKey = key;
-    if (detail) {
-      scene.remove(detail.group);
-      detail.dispose();
-    }
-    plain.forEach((m, id) => (m.visible = id !== s.selected));
+    if (s.selected === detailed) return false;
+    if (detailed) setHeap(detailed, false);
+    setHeap(s.selected, true);
+    detailed = s.selected;
     const c = cones.get(s.selected)!;
     const p = placed.find((x) => x.id === s.selected)!;
-    detail = bodyHeap(c, 'skeleton', { maxSlant: DETAIL_SLANT_M, coreMaterial: coreMaterial(c) });
-    detail.group.position.x = p.x;
-    scene.add(detail.group);
-    scalePerson.position.set(p.x + c.radius * 0.72, 0, c.radius * 0.72);
+    scalePerson.position.set(p.x + c.radius * 0.72 + 1.2, 0, c.radius * 0.72 + 1.2);
     scalePerson.rotation.y = -0.8;
     return true;
   }
@@ -283,6 +311,16 @@ export function createRankingScene(host: HTMLElement): RankingScene {
   const closePose = (id: string): [Vector3, Vector3] => {
     const h = headOf(id);
     return [h, h.clone().add(new Vector3(5, 1.8, 7))];
+  };
+  /** The selected heap alone, peak to foot. */
+  const heapPose = (id: string): [Vector3, Vector3] => {
+    const c = cones.get(id)!;
+    const x = placed.find((p) => p.id === id)!.x;
+    const t = new Vector3(x, c.height * 0.4, 0);
+    const span = Math.max(c.radius * 2.3, c.height * 1.6) / Math.min(1, camera.aspect);
+    const dist = span / (2 * Math.tan((camera.fov * Math.PI) / 360)) + c.radius * 0.5;
+    const az = 0.5, pitch = 0.3;
+    return [t, t.clone().add(new Vector3(Math.sin(az) * Math.cos(pitch), Math.sin(pitch), Math.cos(az) * Math.cos(pitch)).multiplyScalar(dist))];
   };
   /** Oblique view down the row from in front of the big heaps, so size falls away into the distance. */
   const rowPose = (): [Vector3, Vector3] => {
@@ -309,18 +347,17 @@ export function createRankingScene(host: HTMLElement): RankingScene {
 
   function update(s: RankingState) {
     const rowChanged = buildRow(s.estimate);
-    if (rowChanged) detailKey = '';
     const detailChanged = buildDetail(s);
     if (rowChanged || detailChanged) {
       renderer.shadowMap.needsUpdate = true;
       invalidate();
     }
-    const [t, p] = s.camera === 'row' ? rowPose() : closePose(s.selected);
+    const [t, p] = s.camera === 'row' ? rowPose() : s.camera === 'heap' ? heapPose(s.selected) : closePose(s.selected);
     if (!applied) {
       controls.target.copy(t);
       camera.position.copy(p);
       controls.update();
-    } else if (applied.camera !== s.camera || (s.camera === 'close' && (applied.selected !== s.selected || rowChanged))) {
+    } else if (applied.camera !== s.camera || (s.camera !== 'row' && (applied.selected !== s.selected || rowChanged))) {
       easeTo(t, p);
     }
     applied = { camera: s.camera, selected: s.selected };
@@ -377,16 +414,36 @@ export function createRankingScene(host: HTMLElement): RankingScene {
   }
   raf = requestAnimationFrame(frame);
 
+  function bench(n: number) {
+    const gl = renderer.getContext();
+    const px = new Uint8Array(4);
+    const saved = camera.position.clone();
+    const ms: number[] = [];
+    for (let i = 0; i < n; i++) {
+      camera.position.sub(controls.target).applyAxisAngle(new Vector3(0, 1, 0), 0.05).add(controls.target);
+      camera.lookAt(controls.target);
+      const t0 = performance.now();
+      renderer.render(scene, camera);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); // wait for the GPU
+      ms.push(performance.now() - t0);
+    }
+    ms.sort((a, b) => a - b);
+    camera.position.copy(saved);
+    invalidate();
+    let pieces = 0;
+    heaps.forEach((h) => (pieces += h.instances));
+    return { ms: Math.round(ms[ms.length >> 1] * 10) / 10, pieces, triangles: renderer.info.render.triangles };
+  }
+
   return {
     update,
+    bench,
     onAnchors: (cb) => (anchorCb = cb),
     dispose() {
       cancelAnimationFrame(raf);
       ro.disconnect();
       controls.dispose();
-      detail?.dispose();
-      disposeGroup(row);
-      leaderGeo.dispose();
+      disposeRow();
       tex.dispose();
       composer.dispose();
       renderer.dispose();
