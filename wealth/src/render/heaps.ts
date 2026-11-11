@@ -106,7 +106,14 @@ const HI_DETAIL_SLANT_M = 20;
 const FAR_SLANT_M = 45;
 type Tier = Detail | 'far';
 
-export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
+export interface BodyHeapOptions {
+  /** Draw pieces only within this distance down the slope from the peak; the core shows below it. */
+  maxSlant?: number;
+  /** Replaces the plain dark core, e.g. a textured one for heaps seen from far away. */
+  coreMaterial?: MeshStandardMaterial;
+}
+
+export function bodyHeap(cone: Cone, style: BodyStyle, opts: BodyHeapOptions = {}): Heap {
   const layers = 2;
   const layerDepth = 0.26;
   const shell = buildShell({
@@ -131,6 +138,7 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
   const m = new Matrix4();
   const tierOf = (i: number): Tier | null => {
     const sl = shell.slant[i];
+    if (opts.maxSlant !== undefined && sl > opts.maxSlant) return null;
     if (sl < HI_DETAIL_SLANT_M) return 'hi';
     if (sl < FAR_SLANT_M) return 'lo';
     return shell.layer[i] === 0 ? 'far' : null;
@@ -160,7 +168,7 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
     }
   }
 
-  const coreMat = new MeshStandardMaterial({ color: CORE[style], roughness: 1 });
+  const coreMat = opts.coreMaterial ?? new MeshStandardMaterial({ color: CORE[style], roughness: 1 });
   group.add(core(cone, layers * layerDepth + 0.05, coreMat));
   return {
     group,
