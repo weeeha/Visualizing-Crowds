@@ -1,16 +1,11 @@
-import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
   build: {
-    rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html'),
-        ranking: resolve(__dirname, 'ranking.html'),
-      },
-    },
+    // Two pages: the original pile and the ranking. Paths resolve against the project root.
+    rollupOptions: { input: { main: 'index.html', ranking: 'ranking.html' } },
   },
   test: {
     include: ['src/**/*.test.ts'],
