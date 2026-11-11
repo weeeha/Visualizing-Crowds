@@ -13,6 +13,7 @@ import {
 } from 'three';
 import { buildShell, hash01 } from '../pile/shell';
 import { REPOSE_DEG, type Cone } from '../pile/volume';
+import { farSkeleton, lyingSkeletons as fullSkeletons } from './bones';
 import { BUNDLE, bundleGeometry, bundleMaterials, cashCoreMaterial, farBody, figureMaterial, lyingMannequins, lyingSkeletons, shrouds, type Detail } from './models';
 
 export type BodyStyle = 'mannequin' | 'shroud' | 'skeleton';
@@ -103,8 +104,10 @@ const CORE: Record<BodyStyle, string> = { mannequin: '#4a4540', shroud: '#6b655b
 
 // Detail by distance down the slope from the peak, where the camera always orbits.
 const HI_DETAIL_SLANT_M = 20;
+// Skeletons only: full anatomy this close to the peak, where the camera stands.
+const TOP_DETAIL_SLANT_M = 8;
 const FAR_SLANT_M = 45;
-type Tier = Detail | 'far';
+type Tier = 'top' | Detail | 'far';
 
 export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
   const layers = 2;
@@ -115,7 +118,7 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
     layerDepth,
     layers,
     seed: 23,
-    variants: 5,
+    variants: 8,
     tilt: 0.3,
     // More than half of the estimated deaths are children: 55% child-sized, 45% adult-sized.
     scale: (r) => (r < 0.55 ? 0.5 + (r / 0.55) * 0.3 : 0.9 + ((r - 0.55) / 0.45) * 0.15),
@@ -124,22 +127,26 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
   // Near the peak: full detail, casting shadows. Mid-slope: a light mesh. Far down the slope (only
   // the larger estimates reach it): a simple form, outer layer only; the dark core fills the gaps.
   const build = (d: Detail) => (style === 'mannequin' ? lyingMannequins(d) : style === 'skeleton' ? lyingSkeletons(d) : shrouds(d));
-  const geos: Record<Tier, BufferGeometry[]> = { hi: build('hi'), lo: build('lo'), far: [farBody()] };
+  const bones = style === 'skeleton';
+  const geos: Record<Tier, BufferGeometry[]> = bones
+    ? { top: fullSkeletons(2), hi: fullSkeletons(1), lo: build('lo'), far: [farSkeleton()] }
+    : { top: [], hi: build('hi'), lo: build('lo'), far: [farBody()] };
   const mat = figureMaterial();
   const group = new Group();
   const meshes: InstancedMesh[] = [];
   const m = new Matrix4();
   const tierOf = (i: number): Tier | null => {
     const sl = shell.slant[i];
+    if (bones && sl < TOP_DETAIL_SLANT_M) return 'top';
     if (sl < HI_DETAIL_SLANT_M) return 'hi';
     if (sl < FAR_SLANT_M) return 'lo';
     return shell.layer[i] === 0 ? 'far' : null;
   };
   let drawn = 0;
 
-  for (const d of ['hi', 'lo', 'far'] as const) {
+  for (const d of ['top', 'hi', 'lo', 'far'] as const) {
     for (let v = 0; v < geos[d].length; v++) {
-      const pick = (i: number) => tierOf(i) === d && (d === 'far' || shell.variants[i] === v);
+      const pick = (i: number) => tierOf(i) === d && (d === 'far' || shell.variants[i] % geos[d].length === v);
       let n = 0;
       for (let i = 0; i < shell.count; i++) if (pick(i)) n++;
       if (n === 0) continue;
@@ -151,7 +158,7 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
         mesh.setMatrixAt(k++, m);
       }
       mesh.instanceColor = tints(n, PALETTE[style], 31 + v + (d === 'lo' ? 7 : 0), 0.08);
-      mesh.castShadow = d === 'hi';
+      mesh.castShadow = d === 'hi' || d === 'top';
       mesh.receiveShadow = true;
       mesh.computeBoundingSphere();
       meshes.push(mesh);
@@ -166,7 +173,7 @@ export function bodyHeap(cone: Cone, style: BodyStyle): Heap {
     group,
     instances: drawn,
     dispose() {
-      [...geos.hi, ...geos.lo, ...geos.far].forEach((g) => g.dispose());
+      [...geos.top, ...geos.hi, ...geos.lo, ...geos.far].forEach((g) => g.dispose());
       meshes.forEach((x) => x.dispose());
       mat.dispose();
       coreMat.dispose();
