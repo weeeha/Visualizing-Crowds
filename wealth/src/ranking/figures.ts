@@ -2,7 +2,7 @@
 // Faces are left blank, as on the first pile: these are figures in costume, not likenesses.
 // All are drawn 1.75 m tall; the list gives no heights and none are assumed.
 import { SphereGeometry, type BufferGeometry, Vector3 } from 'three';
-import { Parts, v, type V3 } from './geo';
+import { Parts, v, type V3 } from '../render/geo';
 
 type Hat = 'peaked' | 'softcap' | 'flat' | 'bicorne' | 'homburg' | 'fez' | 'beret' | 'peci' | 'fur' | 'crown';
 type Stance = 'plain' | 'behind' | 'coat' | 'hips';

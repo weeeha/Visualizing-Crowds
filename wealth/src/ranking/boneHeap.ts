@@ -6,7 +6,7 @@ import { buildShell, hash01, type Shell } from '../pile/shell';
 import { REPOSE_DEG, type Cone } from '../pile/volume';
 import { figureMaterial, lyingSkeletons as coarseSkeletons } from '../render/models';
 import type { Heap } from '../render/heaps';
-import { farSkeleton, lyingSkeletons } from './bones';
+import { farSkeleton, lyingSkeletons } from '../render/bones';
 
 const PHI = (REPOSE_DEG * Math.PI) / 180;
 const BONE = ['#e6dcc4', '#d9cdb1', '#ece4d0', '#cfc1a2', '#c4b594'];

@@ -2,7 +2,7 @@
 // a curved spine with vertebrae, nine rib pairs, shoulder blades, a winged pelvis, paired forearm and
 // shin bones, hands and feet. 1.75 m, feet at y = 0, standing frame (Y up, front +Z, left +X).
 import { BoxGeometry, BufferGeometry, CatmullRomCurve3, SphereGeometry, Vector3 } from 'three';
-import { POSES } from '../render/models';
+import { POSES } from './models';
 import { Parts, v, type V3 } from './geo';
 
 type Pose = (typeof POSES)[number];
