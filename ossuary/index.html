@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+<title>The Ossuary Ranking</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one ground line of skull mounds, biggest first, then a ledger with the sources. Single dark ossuary look. */
+:root {
+  --bg: #17130f;        /* crypt umber */
+  --bg-2: #211b15;
+  --bone: #e4d8bf;      /* skull fill */
+  --bone-dim: #a89b83;
+  --ink: #ece4d3;
+  --muted: #8f8370;
+  --rule: #3a3128;
+  --rust: #b0583b;      /* rank numerals only */
+  --f-display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --f-body: "IBM Plex Sans", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 40px; }
+header { display: grid; gap: 14px; max-width: 70ch; }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(30px, 5vw, 52px); letter-spacing: .04em; line-height: 1.05; margin: 0; text-wrap: balance; }
+.lede { color: var(--bone-dim); margin: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; border-block: 1px solid var(--rule); padding-block: 12px; }
+.key { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--bone-dim); align-items: center; }
+.key span { display: inline-flex; gap: 8px; align-items: center; }
+.key canvas { width: 14px; height: 14px; }
+.sort { display: flex; gap: 4px; align-items: center; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.sort button { font: 500 13px var(--f-body); color: var(--bone-dim); background: transparent; border: 1px solid var(--rule); padding: 5px 10px; border-radius: 3px; cursor: pointer; }
+.sort button[aria-pressed="true"] { color: var(--bg); background: var(--bone); border-color: var(--bone); }
+.sort button:focus-visible, .mound:focus-visible { outline: 2px solid var(--rust); outline-offset: 3px; }
+
+.field { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 34px 26px; }
+.mound { display: grid; justify-items: center; gap: 8px; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; text-align: center; font: inherit; }
+.mound canvas { display: block; border-bottom: 1px solid var(--rule); }
+.mound .lbl { display: grid; gap: 1px; max-width: 150px; min-height: 64px; align-content: start; }
+.mound .rk { font: 500 11px var(--f-mono); color: var(--rust); letter-spacing: .08em; }
+.mound .nm { font: 500 13px var(--f-display); letter-spacing: .03em; }
+.mound .ct { font: 400 12px var(--f-mono); color: var(--bone-dim); font-variant-numeric: tabular-nums; }
+.mound.dim { opacity: .35; }
+.mound.unranked .rk { color: var(--muted); }
+
+.totals { display: flex; flex-wrap: wrap; gap: 8px 28px; font-size: 13px; color: var(--bone-dim); }
+.totals b { font: 500 15px var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+
+h2 { font-family: var(--f-display); font-weight: 500; font-size: 20px; letter-spacing: .06em; margin: 0 0 12px; }
+.ledger { display: grid; }
+.row { display: grid; grid-template-columns: 44px minmax(0, 190px) minmax(0, 150px) minmax(0, 1fr); gap: 16px; padding-block: 14px; border-top: 1px solid var(--rule); align-items: baseline; }
+.row:target, .row.on { background: var(--bg-2); }
+.row .rk { font: 500 13px var(--f-mono); color: var(--rust); }
+.row .nm { font: 500 15px var(--f-display); letter-spacing: .02em; }
+.row .ct { font: 500 13px var(--f-mono); font-variant-numeric: tabular-nums; }
+.row .note { min-width: 0; color: var(--bone-dim); max-width: 68ch; }
+.row .src { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.caveat { font-size: 13px; color: var(--muted); max-width: 70ch; margin: 0; }
+@media (max-width: 720px) {
+  .row { grid-template-columns: 36px minmax(0, 1fr); gap: 4px 12px; }
+  .row .ct, .row .note { grid-column: 2; }
+  .field { gap: 28px 18px; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>The Ossuary Ranking</h1>
+    <p class="lede">Deaths attributed to seventeen leaders, stacked as mounds of skulls. Each skull stands for 100,000 people. Solid skulls are the low estimate; the faded ones on top cover the range up to the high estimate.</p>
+  </header>
+
+  <div class="controls">
+    <div class="key">
+      <span><canvas id="k-solid" width="28" height="28"></canvas>100,000 deaths, low estimate</span>
+      <span><canvas id="k-ghost" width="28" height="28"></canvas>range up to high estimate</span>
+    </div>
+    <div class="sort" role="group" aria-label="Order the mounds">
+      Order by
+      <button type="button" id="s-list" data-sort="list" aria-pressed="true">Published rank</button>
+      <button type="button" id="s-low" data-sort="low" aria-pressed="false">Low estimate</button>
+      <button type="button" id="s-high" data-sort="high" aria-pressed="false">High estimate</button>
+    </div>
+  </div>
+
+  <div class="field" id="field"></div>
+
+  <div class="totals" id="totals"></div>
+
+  <section>
+    <h2>The ledger</h2>
+    <div class="ledger" id="ledger"></div>
+  </section>
+
+  <p class="caveat">Figures are as given in the source list for this ranking. Historians count differently: some tolls are famine excess deaths, some are war dead on all sides, and the World War II figures for Hitler and Hirohito sit inside the same war. Read each mound as one estimate of responsibility, not a settled body count.</p>
+</div>
+
+<script>
+const UNIT = 100000;
+// low/high in millions. low 0 = only an upper bound was given.
+const DATA = [
+  {r:1,  n:"Adolf Hitler", lo:36.5, hi:36.5, c:"~36.5M", t:"European war deaths. Hitler's invasion of Poland began World War II in Europe. The toll includes 6 million Jews murdered in the Holocaust.", s:"Postwar, U.S. Holocaust Memorial Museum"},
+  {r:2,  n:"Mao Zedong", lo:16.5, hi:45, c:"16.5–45M", t:"Excess or premature deaths during the Great Leap Forward, chiefly from famine driven by his government's policies.", s:"The China Quarterly, Dikötter"},
+  {r:3,  n:"Hong Xiuquan", lo:20, hi:20, c:"20M+", t:"At least 20 million deaths in China's Taiping Civil War, fought between the rebellion he led and the Qing dynasty.", s:"Wiley historical encyclopedia"},
+  {r:4,  n:"Emperor Hirohito", lo:14, hi:14, c:"14M+", t:"At least 14 million Chinese deaths in Japan's war against China. Historians differ on how much control Hirohito exercised over military decisions.", s:"Historian Rana Mitter, National Museum of Nuclear Science & History"},
+  {r:5,  n:"Joseph Stalin", lo:6, hi:9, c:"6–9M", t:"Deaths from famine, executions, deportations, and imprisonment, depending on which deaths are included.", s:"Historian Timothy Snyder"},
+  {r:6,  n:"Vladimir Lenin", lo:5, hi:6, c:"5–6M", t:"Deaths in the Russian famine of 1921–22. Forced grain requisition worsened a crisis already driven by drought and civil war.", s:"PBS, Hoover Institution"},
+  {r:7,  n:"Kim Il-sung", lo:2.5, hi:3, c:"2.5–3M", t:"Military and civilian deaths on all sides of the Korean War, which began with his invasion of South Korea.", s:"Britannica, U.S. Air Force history"},
+  {r:8,  n:"Napoleon Bonaparte", lo:2, hi:3, c:"2–3M", t:"Soldiers who died across the Napoleonic Wars. Civilian losses are harder to estimate.", s:"Cambridge history, Fondation Napoléon"},
+  {r:9,  n:"Winston Churchill", lo:1.5, hi:3, c:"1.5–3M", t:"Deaths in the Bengal famine. His wartime government's relief and shipping decisions were among several factors, alongside crop damage and wartime disruption.", s:"Cambridge University Press, Cormac Ó Gráda"},
+  {r:10, n:"Pol Pot", lo:1.7, hi:2, c:"1.7–2M", t:"Deaths under Cambodia's Khmer Rouge from execution, forced labor, starvation, and disease.", s:"Yale Cambodian Genocide Program, Yale research report"},
+  {r:11, n:"Yakubu Gowon", lo:0, hi:2, c:"up to 2M", t:"Deaths in the Nigerian Civil War, mostly from starvation and disease in Biafra. The federal blockade under Gowon contributed to the famine.", s:"Oxford University Press"},
+  {r:12, n:"Talaat Pasha", lo:0.664, hi:1.2, c:"664K–1.2M", t:"Deaths in the Armenian genocide. Talaat was a principal organizer of the Ottoman deportations and killings.", s:"U.S. Holocaust Memorial Museum, Princeton University Press"},
+  {r:13, n:"Chiang Kai-shek", lo:0.8, hi:0.8, c:"800K+", t:"Deaths in one historical estimate of the 1938 Yellow River flood and its aftermath. His government breached the dikes to slow Japan's advance.", s:"Chronicles of Modern China"},
+  {r:14, n:"Jean Kambanda", lo:0.8, hi:0.8, c:"~800K", t:"People killed in the Rwandan genocide. Kambanda was prime minister during the genocide and pleaded guilty to his role.", s:"United Nations, International Criminal Tribunal for Rwanda"},
+  {r:15, n:"Yahya Khan", lo:0.56, hi:0.56, c:"~560K", t:"Excess deaths among refugees in India alone, according to one study of the 1971 Bangladesh war. Yahya ordered the military crackdown that preceded the mass flight.", s:"PLOS One, U.S. diplomatic archives"},
+  {r:16, n:"Saddam Hussein", lo:0.5, hi:0.5, c:"~500K", t:"Killed on both sides of the Iran–Iraq War, which Saddam began by invading Iran in 1980.", s:"European Union Agency for Asylum"},
+  {r:17, n:"Suharto", lo:0.5, hi:0.5, c:"~500K", t:"Killed in Indonesia's army-led anti-communist massacres of 1965–66 as Suharto rose to power.", s:"National Security Archive, Historian Geoffrey Robinson"},
+  {r:null, n:"Genghis Khan", lo:0, hi:40, c:"40M, disputed", t:"The often-cited 40 million refers to decades of Mongol conquests, including campaigns carried out by his successors after his death in 1227.", s:"World history text, Metropolitan Museum of Art"},
+];
+
+const css = getComputedStyle(document.documentElement);
+const BONE = css.getPropertyValue("--bone").trim();
+const BG = css.getPropertyValue("--bg").trim();
+const S = 8;            // skull size in CSS px
+const STEP_Y = 0.8;     // rows nestle into each other
+
+function skull(ctx, x, y, s, ghost) {
+  ctx.globalAlpha = ghost ? 0.2 : 1;
+  ctx.fillStyle = BONE;
+  ctx.beginPath(); ctx.arc(x + s/2, y + s*0.42, s*0.42, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(x + s*0.26, y + s*0.5, s*0.48, s*0.46, s*0.1); ctx.fill();
+  ctx.globalAlpha = ghost ? 0.55 : 1;
+  ctx.fillStyle = BG;
+  ctx.beginPath(); ctx.arc(x + s*0.33, y + s*0.46, s*0.12, 0, Math.PI*2); ctx.arc(x + s*0.67, y + s*0.46, s*0.12, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+const count = m => Math.round(m * 1e6 / UNIT);
+
+// Stack skulls as a heap: base b holds b skulls, each row above holds one fewer, offset half a skull.
+function drawMound(canvas, solid, ghost) {
+  const total = solid + ghost;
+  let b = 1; while (b * (b + 1) / 2 < total) b++;
+  const rows = []; let left = total;
+  for (let r = 0; r < b && left > 0; r++) { const n = Math.min(b - r, left); rows.push(n); left -= n; }
+  const w = Math.max(b * S, S), h = Math.max((rows.length - 1) * S * STEP_Y + S, S);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.ceil(w * dpr); canvas.height = Math.ceil(h * dpr);
+  canvas.style.width = w + "px"; canvas.style.height = h + "px";
+  const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
+  let i = 0;
+  rows.forEach((n, r) => {
+    const x0 = (w - n * S) / 2, y = h - S - r * S * STEP_Y;
+    for (let k = 0; k < n; k++, i++) skull(ctx, x0 + k * S, y, S, i >= solid);
+  });
+}
+
+const fmt = m => m >= 1 ? (+m.toFixed(1)) + "M" : Math.round(m * 1000) + "K";
+const field = document.getElementById("field");
+const ledger = document.getElementById("ledger");
+let sortBy = "list";
+
+function order() {
+  const ranked = DATA.filter(d => d.r);
+  const key = { list: d => -d.r, low: d => d.lo, high: d => d.hi }[sortBy];
+  ranked.sort((a, b) => key(b) - key(a) || a.r - b.r);
+  return [...ranked, DATA.find(d => !d.r)];
+}
+
+function render() {
+  field.innerHTML = ""; ledger.innerHTML = "";
+  order().forEach((d, idx) => {
+    const id = "p-" + d.n.toLowerCase().replace(/[^a-z]+/g, "-");
+    const solid = count(d.lo), ghost = count(d.hi) - solid;
+    const rankLabel = d.r ? "No. " + d.r : "Unranked";
+    const m = document.createElement("button");
+    m.type = "button"; m.className = "mound" + (d.r ? "" : " unranked"); m.dataset.id = id;
+    m.setAttribute("aria-label", `${d.n}, ${rankLabel}, ${d.c} deaths`);
+    m.innerHTML = `<canvas></canvas><span class="lbl"><span class="rk">${rankLabel}</span><span class="nm">${d.n}</span><span class="ct">${d.c}</span></span>`;
+    drawMound(m.querySelector("canvas"), solid, ghost);
+    m.addEventListener("click", () => select(id, true));
+    field.appendChild(m);
+
+    const row = document.createElement("div");
+    row.className = "row"; row.id = id;
+    row.innerHTML = `<span class="rk">${d.r ?? "—"}</span><span class="nm">${d.n}</span><span class="ct">${d.c}</span><span class="note">${d.t}<span class="src">${d.s}</span></span>`;
+    ledger.appendChild(row);
+  });
+  const ranked = DATA.filter(d => d.r);
+  const lo = ranked.reduce((a, d) => a + d.lo, 0), hi = ranked.reduce((a, d) => a + d.hi, 0);
+  document.getElementById("totals").innerHTML =
+    `<span>Ranked seventeen, low estimates: <b>${fmt(lo)}</b></span><span>High estimates: <b>${fmt(hi)}</b></span><span>Skulls drawn: <b>${count(hi) + count(40)}</b></span>`;
+}
+
+function select(id, scroll) {
+  document.querySelectorAll(".mound").forEach(m => m.classList.toggle("dim", m.dataset.id !== id));
+  document.querySelectorAll(".row").forEach(r => r.classList.toggle("on", r.id === id));
+  if (scroll) document.getElementById(id).scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+}
+field.addEventListener("mouseleave", () => document.querySelectorAll(".mound").forEach(m => m.classList.remove("dim")));
+
+document.querySelectorAll(".sort button").forEach(b => b.addEventListener("click", () => {
+  sortBy = b.dataset.sort;
+  document.querySelectorAll(".sort button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  render();
+}));
+
+// key swatches
+[["k-solid", false], ["k-ghost", true]].forEach(([id, g]) => {
+  const c = document.getElementById(id), ctx = c.getContext("2d"); ctx.scale(2, 2); skull(ctx, 0, 0, 14, g);
+});
+
+const start = () => render();
+document.fonts ? document.fonts.ready.then(start) : start();
+</script>
+
+</html>
