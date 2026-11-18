@@ -1,0 +1,32 @@
+/* Ranking page additions; tokens come from ../styles.css. */
+button.tag { border: 0; padding: 0; background: none; color: inherit; font: inherit; font-size: var(--fs-small); cursor: pointer; }
+.rank-tag strong { font-weight: 500; }
+.rank-tag.on strong { background: var(--ink); color: var(--paper); font-weight: 600; }
+.rank-tag.on { z-index: 1; }
+.rank-tag:focus-visible strong { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.rank-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.rank-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-small);
+  text-align: left;
+  cursor: pointer;
+}
+.rank-row:hover { background: var(--surface); }
+.rank-row.on { background: var(--ink); color: var(--paper); }
+.rank-row:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.rank-row .rk { color: var(--muted); font-variant-numeric: tabular-nums; }
+.rank-row.on .rk { color: inherit; }
+.rank-row .ct { font-variant-numeric: tabular-nums; }
+.count-status strong { font-weight: 600; color: var(--ink); }
